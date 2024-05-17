@@ -1,0 +1,237 @@
+---
+title: "NYC Shootings and Arrests - Data Preparation"
+author: "Sebastiano Quintavale - 878500"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+    html_document:
+        toc: true
+    pdf_document:
+        toc: true
+---
+```{r setup, echo=FALSE}
+
+# Don't display code in the final document
+knitr::opts_chunk$set(echo=FALSE)
+
+# Set English language
+Sys.setlocale("LC_TIME", "en_US.UTF-8")
+
+# Clear the environment
+rm(list = ls())
+
+# Load libraries
+library("chron") # manipulate timedays
+
+# Load R script sources
+source("src/settings.R")
+```
+
+# Shootings
+
+```{r load shootings}
+
+shootings <- read.csv(SHOOTINGS)
+
+head(shootings)
+
+```
+
+```{r shootings type casting}
+
+# Keep columns of interest
+shootings <- shootings[, SHOOTINGS_COLS]
+
+# Cast to date and time type
+shootings$OCCUR_DATE <- as.Date(shootings$OCCUR_DATE, format = "%m/%d/%Y")
+shootings$OCCUR_TIME <- times(shootings$OCCUR_TIME)
+
+# Cast Borough to factor
+shootings$Borough       <- as.factor(shootings$BORO)
+shootings$BORO          <- NULL
+
+# Extract time features
+shootings$Year    <- as.numeric(format(shootings$OCCUR_DATE, "%Y"))
+shootings$Month   <- as.numeric(format(shootings$OCCUR_DATE, "%m"))
+
+# Save the first and last date
+date.first <- min(shootings$OCCUR_DATE)
+date.last  <- max(shootings$OCCUR_DATE)
+
+shootings$OCCUR_DATE <- NULL
+shootings$OCCUR_TIME <- NULL
+
+summary(shootings)
+```
+
+```{r shootings month aggregation}
+
+# Create a new dataset counting how many arrests in each month
+shootings_month <- aggregate(
+    INCIDENT_KEY ~ Borough + Month + Year,
+    data = shootings,
+    FUN  = length
+)
+
+# Change count colname
+names(shootings_month)[4] <- "Shootings"
+
+# Create a dummy dataset to fill missing months with no shooting
+shootings_month_dummy <- expand.grid(
+    OCCUR_DATE     = seq(date.first, date.last, by = "month"),
+    Borough        = levels(shootings$Borough),
+    ShootingsDummy = 0
+)
+
+# Cast to the appropriate type
+shootings_month_dummy$OCCUR_DATE <- as.Date(shootings_month_dummy$OCCUR_DATE, format="%m/%d/%Y")
+shootings_month_dummy$Year       <- as.numeric(format(shootings_month_dummy$OCCUR_DATE, "%Y"))
+shootings_month_dummy$Month      <- as.numeric(format(shootings_month_dummy$OCCUR_DATE, "%m"))
+shootings_month_dummy$OCCUR_DATE <- NULL
+
+# Merge the two datasets
+shootings_month <- merge(
+    shootings_month,
+    shootings_month_dummy,
+    by  = c("Borough", "Year", "Month"),
+    all = TRUE # Produce NAN for missing values
+)
+
+# Fill missing values with 0
+shootings_month$Shootings[is.na(shootings_month$Shootings)] <- 0
+shootings_month$ShootingsDummy <- NULLis.na(shootings_month$Shootings)
+rm(shootings_month_dummy)
+
+head(shootings_month)
+```
+
+
+
+```{r load arrests}
+
+arrests <- read.csv(ARRESTS)
+
+head(arrests)
+
+```
+
+```{r arrests}
+
+# Keep columns of interest
+arrests <- arrests[, ARRESTS_COLS]
+
+# Map categories to specified class
+# and remove rows with other categories
+for (crime in names(CRIMES)) {
+    arrests$PD_DESC[arrests$PD_DESC %in% CRIMES[[crime]]] <- crime
+}
+arrests <- arrests[(arrests$PD_DESC %in% names(CRIMES)), ]
+
+# Map boroughs to same name as shootings
+arrests$ARREST_BORO <- borough_name_map[arrests$ARREST_BORO]
+
+# Cast to date 
+arrests$ARREST_DATE  <- as.Date  (arrests$ARREST_DATE, format = "%m/%d/%Y")
+arrests$Year         <- as.numeric(format(arrests$ARREST_DATE, "%Y"))
+arrests$Month        <- as.numeric(format(arrests$ARREST_DATE, "%m"))
+arrests$Borough      <- as.factor(arrests$ARREST_BORO)
+arrests$Crime        <- as.factor(arrests$PD_DESC)
+arrests$PD_DESC      <- NULL
+arrests$ARREST_DATE  <- NULL
+arrests$ARREST_BORO  <- NULL
+
+head(arrests)
+
+```
+
+```{r arrests month aggregation}
+
+# Create a new dataset counting how many arrests in each month
+arrests_month <- aggregate(
+    ARREST_KEY ~ Month + Year + Crime + Borough,
+    data = arrests,
+    FUN  = length
+)
+# Set count colname
+names(arrests_month)[5] <- "Arrests"
+
+# Merge with a dummy dataset to fill in missing months
+dummy_arrests_month <- expand.grid(
+    OCCUR_DATE   = seq(date.first, date.last, by = "month"),
+    Borough      = levels(arrests$Borough),
+    Crime        = levels(arrests$Crime),
+    ArrestsDummy = 0
+)
+
+# Cast to the appropriate type
+dummy_arrests_month$OCCUR_DATE <- as.Date          (dummy_arrests_month$OCCUR_DATE, format="%m/%d/%Y")
+dummy_arrests_month$Year       <- as.numeric(format(dummy_arrests_month$OCCUR_DATE, "%Y"))
+dummy_arrests_month$Month      <- as.numeric(format(dummy_arrests_month$OCCUR_DATE, "%m"))
+dummy_arrests_month$OCCUR_DATE <- NULL
+
+# Merge the two datasets
+arrests_month <- merge(
+    arrests_month,
+    dummy_arrests_month,
+    by  = c("Borough", "Crime", "Year", "Month"),
+    all = TRUE # Produce NAN for missing values
+)
+
+# Fill missing values with 0
+arrests_month$Arrests[is.na(arrests_month$Arrests)] <- 0
+arrests_month$ArrestsDummy <- NULL
+
+head(arrests_month)
+
+```
+
+```{r arrests reshaping}
+
+# Reorganaize the dataset using Crime as column
+arrests_month <- reshape(
+    arrests_month,
+    idvar = c("Borough", "Year", "Month"),
+    timevar = "Crime",
+    direction = "wide"
+)
+names(arrests_month) <- gsub("Arrests.", "", names(arrests_month))
+
+# Add a column with the total number of arrests
+arrests_month$TotArrests <- rowSums(arrests_month[, 4:ncol(arrests_month)], na.rm = TRUE)
+
+```
+
+```{r merge datasets}
+
+# Merge arrests and shootings
+nyc_month_crimes <- merge(
+    arrests_month,
+    shootings_month, 
+    by = c("Borough", "Year", "Month"), 
+    all = TRUE
+)
+
+# Add a new NewYork borough with the sum of all crimes
+nyc_month_crimes_tot         <- nyc_month_crimes
+nyc_month_crimes_tot$Borough <- rep("NEW YORK", nrow(nyc_month_crimes_tot))
+
+# Calculate the sum of all crimes for each year and month
+new_york_criminality <- aggregate(
+    . ~ Borough + Month + Year,
+    data = nyc_month_crimes_tot,
+    FUN = sum,
+    na.rm = TRUE
+) 
+
+# Concatene criminality and new york criminality
+nyc_month_crimes         <- rbind(nyc_month_crimes, new_york_criminality)
+nyc_month_crimes$Borough <- borough_name_map2[nyc_month_crimes$Borough]
+nyc_month_crimes$Borough <- as.factor(nyc_month_crimes$Borough)
+summary(nyc_month_crimes)
+```
+
+```{r save datasets}
+
+# Save the datasets
+write.csv(nyc_month_crimes, NYC_MONTH_CRIMES, row.names = FALSE)
+
+```
