@@ -1,0 +1,221 @@
+---
+title: "NYC Shootings and Arrests - Data analysis"
+author: "Sebastiano Quintavale - 878500"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+    html_document:
+        toc: true
+    pdf_document:
+        toc: true
+---
+
+```{r}
+
+# Don't display code in the final document
+knitr::opts_chunk$set(echo = FALSE)
+
+# Set English language
+Sys.setlocale("LC_TIME", "en_US.UTF-8")
+
+# Remove plots
+if(!is.null(dev.list())) dev.off()
+
+# Clear the environment
+rm(list = ls())
+
+# Load libraries
+library(car )
+library(leaps)
+library(RColorBrewer)
+library(effects)
+
+# Load R script sources
+source("src/settings.R")
+source("src/analysis.R")
+source("src/plot.R")
+source("src/time.R")
+
+```
+
+```{r}
+
+crimes <- read.csv(FILE_PATHS$NycMonthCrimes)
+
+head(crimes)
+summary(crimes)
+
+# Save the names of the crimes
+crime_names <- colnames(crimes)[4:(length(colnames(crimes))-1)]
+
+```
+
+```{r}
+
+# Add discrete version for Month and Year
+crimes$MonthName <- as.factor(month.name[crimes$Month])
+crimes$MonthName <- factor(crimes$MonthName, levels = month.name)
+
+crimes$YearN     <- as.factor(crimes$Year)
+
+```
+
+```{r}
+
+# Split Train and Test
+crimes$Borough <- as.factor(crimes$Borough) 
+
+crimes_test <- crimes[  crimes$Year %in% YEAR_TEST , ]
+crimes      <- crimes[!(crimes$Year %in% YEAR_TEST), ]
+
+# Drop unused levels of YearN
+crimes     $YearN <- droplevels(crimes     $YearN)
+crimes_test$YearN <- droplevels(crimes_test$YearN)
+
+```
+
+```{r}
+
+# Plots
+for(time in c("Year", "Month")) {
+    borough_scatterplot(
+        df_     = crimes,
+        x       = time,
+        y       = "Shootings",
+        title   = paste("Boroughs - Shootings by", time),
+        jitter_ = TRUE
+    )
+}
+
+for (crime in crime_names) {
+    borough_scatterplot(
+        df_     = crimes,
+        x       = crime,
+        y       = "Shootings",
+        title   = paste("Boroughs - Shootings vs ", crime),
+        jitter_ = TRUE
+    )
+}
+```
+
+```{r}
+# Extract outliers
+crimes[
+    crimes$TotArrests < 2000 & 
+    crimes$Shootings  >  100, 
+]
+```
+
+```{r}
+# Take apart Queens from the borough and recompute the total
+queens_crimes      <- crimes     [crimes     $Borough == "Queens", ]
+queens_crimes_test <- crimes_test[crimes_test$Borough == "Queens", ]
+crimes             <- crimes     [crimes     $Borough != "Queens", ]
+crimes_test        <- crimes_test[crimes_test$Borough != "Queens", ]
+
+# Reset indexes
+rownames(queens_crimes)      <- NULL
+rownames(queens_crimes_test) <- NULL
+rownames(crimes)             <- NULL
+rownames(crimes_test)        <- NULL
+
+# Adjust Borough levels
+queens_crimes     $Borough <- NULL
+queens_crimes_test$Borough <- NULL
+crimes            $Borough <- droplevels(crimes     $Borough)
+crimes_test       $Borough <- droplevels(crimes_test$Borough)
+
+```
+
+```{r}
+
+plot(queens_crimes)
+
+# Better inspect three instering predicors
+{
+    par(mfrow = c(2, 2))
+    for (x in c("Year", "Month", "Murder", "TotArrests")) {
+        plot(
+            queens_crimes[[x]], queens_crimes$Shootings,
+            xlab = x, ylab = "Shootings", main = paste(x, "vs Shootings"),
+            pch = 19
+        )
+    }
+    par(mfrow = c(1, 1))
+}
+
+# Compute mean and standard deviation of shootings
+mean(queens_crimes$Shootings)
+sd  (queens_crimes$Shootings)
+
+# Time relations
+plot_month_ts(
+    df_=queens_crimes, 
+    y="Shootings",
+    title="Shootings in Queens",
+    y_lab="Shootings Count",
+)
+
+plot_ts_stl_decomposition(
+    df_=queens_crimes,
+    y="Shootings",
+    title="Shootings in Queens"
+)
+
+# Compute the mean per each year
+tapply(queens_crimes$Shootings, queens_crimes$Year, mean)
+
+# Compute the mean per month
+tapply(queens_crimes$Shootings, queens_crimes$Month, mean)
+
+```
+
+```{r}
+
+# Linear models
+queens_crimes_lm <- list()
+
+# Null model predicting the mean level
+queens_crimes_lm$null <- lm(Shootings ~ 1, data=queens_crimes)
+lm_diagnostic(queens_crimes_lm$null, residuals=FALSE, effects=FALSE)
+
+queens_crimes[c(10, 43), ]
+
+# Using month levels with constraints they sum up to 0
+contrasts(queens_crimes$MonthName) <- contr.sum(12)
+queens_crimes_lm$month <- lm(Shootings ~ MonthName, data=queens_crimes)
+lm_diagnostic(queens_crimes_lm$month)
+
+queens_crimes[c(159, 175), ]
+
+# Using arrests and murders
+queens_crimes_lm$arrests <- lm(Shootings ~ TotArrests + I(TotArrests^2) + Murder, data=queens_crimes)
+lm_diagnostic(queens_crimes_lm$arrests, effects_sub=c(2, 3))
+
+# Select the best model using step subset selection leaps library
+
+subset_regression_info(
+    subset_reg = regsubsets(
+        Shootings ~ . - TotArrests - YearN - MonthName,
+        data = queens_crimes
+    )
+)
+
+# Select the regsubsets model with 4 predictors
+queens_crimes_lm$auto <- lm(
+    Shootings ~ Month + Mischief + Murder + Trepass,
+    data = queens_crimes
+)
+lm_diagnostic(queens_crimes_lm$auto)
+```
+
+```{r}
+models_stats <- models_prediction_comparison(
+    models=queens_crimes_lm,
+    df_test=queens_crimes_test,
+    y="Shootings",
+    title="Shootings in Queens - Test set predictions"
+)
+
+models_stats
+```
+
