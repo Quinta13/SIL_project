@@ -19,4 +19,4 @@ FILE_PATHS <- list(
 YEAR_TEST <- c(2022, 2023)
 
 # Style
-PALETTE = "Set2"  # https://r-graph-gallery.com/38-rcolorbrewers-palettes.html
+PALETTE = "Set1"  # https://r-graph-gallery.com/38-rcolorbrewers-palettes.html
