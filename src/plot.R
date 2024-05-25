@@ -9,7 +9,7 @@
 
 # --- PLOTTING UTILS ---
 
-pred_error_bar <- function(df_, stats, col, y, lty='solid') {
+draw_pred_ci <- function(df_, stats, col, y, lty='solid') {
 
     # Transform prediction into time series
     pred_ts <- df_to_month_ts(
@@ -41,6 +41,48 @@ pred_error_bar <- function(df_, stats, col, y, lty='solid') {
 }
 
 
+
+#' Plot Coefficients
+#'
+#' This function plots the coefficients of a model, including the sum of the coefficients.
+#'
+#' @param coefs A numeric vector of coefficients.
+#' @param xlab The label for the x-axis. Default is an empty string.
+#' @param title The title of the plot. Default is an empty string.
+#' @param labels A character vector of labels for the x-axis. Default is NULL.
+#'
+#' @return None
+#'
+#' @examples
+#' coefs <- c(0.5, 0.3, -0.2)
+#' plot_coefficients(coefs, xlab="Features", title="Model Coefficients", labels=c("A", "B", "C"))
+#'
+plot_coefficients <- function(coefs, xlab="", title="", labels=NULL) {
+
+    coefs2 <- c(coefs, -sum(coefs))
+
+    plot(
+        coefs2, 
+        xlab=xlab,
+        ylab="Coefficient", 
+        xaxt="n", 
+        main=title,
+        col="steelblue", 
+        pch=19, 
+        type="o"
+    )
+    
+    grid()
+
+    axis(
+        side=1, 
+        at=1:length(coefs2), 
+        labels=labels
+    )
+
+}
+
+
 #' levels_scatterplot Function
 #'
 #' This function creates a scatterplot with different levels of a variable.
@@ -67,9 +109,6 @@ levels_scatterplot <- function(
     legend_pos = "topright"
 ) {
     
-    # Define palette
-    palette(brewer.pal(n = length(unique(df_[[levels]])), name = PALETTE))
-
     # Add jitter to the x-axis if needed
     x_ = df_[[x]] 
     if (jitter_) { x_ <- jitter(df_[[x]]) }
@@ -148,5 +187,61 @@ subset_regression_info <- function(subset_reg) {
     }
 
     par(mfrow=c(1, 1))
+
+}
+
+
+#' Plot model lines
+#'
+#' This function plots the model lines for different levels of a categorical variable.
+#'
+#' @param df_ The data frame containing the data.
+#' @param model The model object.
+#' @param x The name of the predictor variable on the x-axis.
+#' @param y The name of the response variable on the y-axis.
+#' @param levels The name of the categorical variable used to create different lines.
+#' @param title The title of the plot.
+#' @param ylab The label for the y-axis.
+#'
+#' @return None
+#'
+#' @examples
+#' df <- data.frame(x = 1:10, y = 1:10, levels = rep(c("A", "B"), each = 5))
+#' model <- lm(y ~ x, data = df)
+#' plot_model_lines(df, model, "x", "y", "levels", "Model Lines", "Response")
+#' 
+plot_model_lines <- function(
+    df_, model, x, y, levels, title, ylab
+) {
+
+    # Plot points
+    levels_scatterplot(
+        df_=df_,
+        x=x, y=y, levels=levels
+    )
+
+    # Create dummy DF for predictions
+    dummy_df <- data.frame(tmp = seq(min(crimes[[x]]), max(crimes[[x]]), by = 1))
+    dummy_df[[x]] <- dummy_df$tmp
+    dummy_df[[y]] <- NULL
+
+    levels_values <- levels(crimes[[levels]])
+
+    for (i in 1:length(levels_values)) {
+
+        # Extract the level value
+        value <- levels_values[i]
+
+        # Compute predictions for that Borough
+        dummy_df[[levels]] <- rep(value, nrow(dummy_df))
+        preds <- predict(model, newdata = dummy_df)
+
+        lines(
+            x = dummy_df[[x]],
+            y = preds,
+            col = get_palette_color(i),
+            lwd = 2
+        )
+    }
 
 }

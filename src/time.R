@@ -94,7 +94,7 @@ plot_multiple_ts <- function(
         lines(
             ts_list[[i_name]], type="l", 
             lwd=lwd, lty=lty, 
-            col=palette()[i]
+            col=get_palette_color(i)
         )
     }
 
@@ -165,6 +165,53 @@ plot_month_ts <- function(
 
 
 # --- TIME SERIES ANALYSIS ---
+
+
+#' Plot Cross-Correlation Function (CCF) for Features
+#'
+#' This function plots the Cross-Correlation Function (CCF) between each feature
+#' in a given data frame and a target variable.
+#'
+#' @param df_ The data frame containing the features and the target variable.
+#' @param features A character vector specifying the names of the features to plot.
+#' @param y The name of the target variable.
+#' @param lag.max The maximum lag to consider in the CCF calculation.
+#' @param cex.main The font size for the main title of each plot.
+#'
+#' @return None (plots are displayed on the screen).
+#'
+#' @examples
+#' # Assuming df_ is a data frame with columns "feature1", "feature2", and "target"
+#' plot_feature_ccf(df_, c("feature1", "feature2"), "target", lag.max = 36, cex.main = 0.8)
+#'
+plot_feature_ccf <- function(
+    df_,
+    features,
+    y,
+    lag.max = 36,
+    cex.main = 0.8
+) {
+
+    # Plot the CCF for each feature
+    for (x in features) {
+
+        # Plot the CCF
+        ccf(
+            x = df_[[x]],
+            y = df_[[y]],
+            lag.max = lag.max,
+            ylab = "CCF",
+            main = ""
+        )
+
+        # Add title with font size option
+        title(
+            main = paste("CCF -", x, "vs", y),
+            cex.main = cex.main
+        )
+
+    }
+}
 
 
 #' Plot Cross-Correlation Function (CCF) Grid

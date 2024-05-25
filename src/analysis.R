@@ -6,7 +6,136 @@
 #' @date 2024-05-15
 #' @version 1.0
 #'
+#' 
 
+# --- DATA MANIPULATION ---
+
+#' Discretize the columns in a data frame
+#'
+#' This function takes a data frame as input and discretizes specific columns
+#' in the data frame. It converts the "Borough" column to a factor, the "Month"
+#' column to a factor with month names, and the "Year" column to a factor.
+#'
+#' @param df_ The input data frame
+#' @return The discretized data frame
+#'
+#' @examples
+#' df <- data.frame(Borough = c("Manhattan", "Brooklyn", "Queens"),
+#'                  Month = c(1, 2, 3),
+#'                  Year = c(2020, 2021, 2022))
+#' discretize(df)
+#'
+#' @export
+discretize <- function(df_) {
+
+    df_$Borough   <- as.factor(df_$Borough)
+    df_$MonthName <- as.factor(month.name[df_$Month])
+    df_$MonthName <-    factor(df_$MonthName, levels = month.name) # reorder levels by month
+    df_$YearN     <- as.factor(df_$Year)
+
+    return(df_)
+
+}
+
+
+#' Split the dataset into training and testing sets based on the specified years.
+#'
+#' This function takes a dataframe and a vector of years to be used for testing. It splits the dataframe into two subsets: one for training and one for testing.
+#' The rows with years present in the \code{year_test} vector are extracted into the testing subset, while the remaining rows are kept in the training subset.
+#' Additionally, unused levels of the \code{YearN} variable are dropped from both subsets.
+#'
+#' @param df_ The input dataframe.
+#' @param year_test A vector of years to be used for testing.
+#'
+#' @return A list containing two dataframes: \code{train} for training and \code{test} for testing.
+#'
+#' @examples
+#' df <- data.frame(Year = c(2010, 2011, 2012, 2013, 2014),
+#'                  YearN = c("Y1", "Y2", "Y3", "Y4", "Y5"),
+#'                  Value = c(10, 20, 30, 40, 50))
+#' split_data <- train_test_split(df, c(2013, 2014))
+#' train_data <- split_data$train
+#' test_data <- split_data$test
+#' 
+#' @export
+train_test_split <- function(df_, year_test) {
+
+    df_test <- df_[ (df_$Year %in% year_test), ]
+    df_     <- df_[!(df_$Year %in% year_test), ]
+
+    # Drop unused levels of YearN
+    df_    $YearN <- droplevels(df_    $YearN)
+    df_test$YearN <- droplevels(df_test$YearN)
+
+    # Reset rows
+    rownames(df_)     <- NULL
+    rownames(df_test) <- NULL
+
+    return (
+        list(
+            train = df_,
+            test  = df_test
+        )
+    )
+}
+
+#' Perform PCA analysis on a data frame
+#'
+#' This function performs Principal Component Analysis (PCA) on a given data frame.
+#' It aggregates the data based on a specified level, performs PCA, and plots the results.
+#' Additionally, it allows highlighting specific arrows in the biplot.
+#'
+#' @param df_ The input data frame.
+#' @param features A character vector specifying the column names of the features to be used in the analysis.
+#' @param levels A character vector specifying the column name of the level to aggregate the data on.
+#' @param title A character string specifying the title of the biplot.
+#' @param highligth A character vector specifying the row names of the arrows to be highlighted in the biplot.
+#'
+#' @return None
+#'
+#' @examples
+#' # Example usage
+#' pca_analysis(df, c("feature1", "feature2"), "level", "PCA Analysis", c("arrow1", "arrow2"))
+#'
+#' @export
+pca_analysis <- function(df_, features, levels, title, highligth = c()) {
+
+    # Aggregate data based on the input level
+    df_agg <- aggregate(
+        df_[, features],
+        by = list(df_[[levels]]),
+        FUN = mean
+    )
+
+    colnames(df_agg) <- c(levels, features)
+    rownames(df_agg) <- df_agg[[levels]]
+    df_agg[[levels]] <- NULL
+
+    # Perform PCA
+    pca_out <- prcomp(df_agg, scale = TRUE)
+
+    # Print mean and variance of the features
+    print(
+        data.frame(
+            row.names = names(pca_out$center),
+            Center    = pca_out$center,
+            Scale     = pca_out$scale
+        )
+    )
+
+    # Plot
+    biplot(pca_out, scale = 0, main = title)
+
+    # Highlight specific arrows
+    if (length(highligth) > 0) {
+        highlighted_indices <- which(rownames(pca_out$rotation) %in% highligth)
+        arrows(
+            0, 0, pca_out$rotation[highlighted_indices, 1], pca_out$rotation[highlighted_indices, 2],
+            col = "red", length = 0.1, lwd = 2
+        )
+    }
+
+}
 
 # --- MODEL DIAGNOSTIC ---
 
@@ -43,7 +172,6 @@ lm_diagnostic <- function(
 
     # Print the summary
     print(summary(lm))
-
     # Residuals
     if(residuals) {
         residualPlots(lm)
@@ -70,7 +198,6 @@ lm_diagnostic <- function(
     }
 
 }
-
 
 # --- PREDICTIONS ---
 
@@ -140,6 +267,7 @@ models_prediction_comparison <- function(models, df_test, y, title="") {
     
     # 1. TABLE
 
+
     # Compute predictions
     models_stats <- lapply(models, function(model) {
 
@@ -176,11 +304,11 @@ models_prediction_comparison <- function(models, df_test, y, title="") {
 
         model_name <- names(models)[i]
 
-        pred_error_bar(
+        draw_pred_ci(
             df_=df_test,
             stats=models_stats[[model_name]],
             y=y,
-            col=palette()[i]
+            col=get_palette_color(i)
         )
 
     }
@@ -266,10 +394,10 @@ model_levels_predictions <- function(
         )
 
         # Plot the predictions errors bars
-        pred_error_bar(
+        draw_pred_ci(
             df_=df_value, 
             y=y, 
-            col=palette()[i],
+            col=get_palette_color(i),
             stats=stats,
             lty='dashed'
         )

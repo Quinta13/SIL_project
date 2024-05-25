@@ -1,0 +1,410 @@
+---
+title: "NYC Shootings and Arrests - Data analysis"
+author: "Sebastiano Quintavale - 878500"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+    html_document:
+        toc: true
+    pdf_document:
+        toc: true
+---
+
+```{r}
+
+# Clear preexisting environment
+if (!is.null(dev.list())) dev.off()
+rm(list = ls())
+
+# Don't display code chunks
+knitr::opts_chunk$set(echo = FALSE)
+
+# Load R script sources
+source("src/settings.R")
+source("src/analysis.R")
+source("src/utils.R")
+source("src/plot.R")
+source("src/time.R")
+
+# Load requirements
+load_requirements(REQUIREMENTS)
+
+# Set environment variables
+set.seed(SEED)
+Sys.setlocale("LC_TIME", LANG)
+palette(PALETTE$vibrant)
+
+```
+
+```{r}
+
+# Load data
+crimes <- read.csv(FILE_PATHS$NycMonthCrimes)
+
+head(crimes)
+summary(crimes)
+nrow(crimes)
+
+# Save the names of the crimes (excluding TotArrests)
+crime_names <- colnames(crimes)[4:(length(colnames(crimes)) - 2)]
+```
+
+```{r}
+# Add discrete version for Month and Year
+crimes <- discretize(df_=crimes)
+head(crimes)
+```
+
+```{r}
+
+# Split Train and Test
+split       <- train_test_split(df_=crimes)
+crimes      <- split$train
+crimes_test <- split$test
+rm(split)
+
+summary(crimes)
+```
+
+```{r}
+# Take apart Queens from the borough and recompute the total
+queens_crimes <- crimes[crimes$Borough == "Queens", ]
+queens_crimes_test <- crimes_test[crimes_test$Borough == "Queens", ]
+df_ <- crimes[crimes$Borough != "Queens", ]
+crimes_test <- crimes_test[crimes_test$Borough != "Queens", ]
+
+# Reset indexes
+rownames(queens_crimes) <- NULL
+rownames(queens_crimes_test) <- NULL
+rownames(df_) <- NULL
+rownames(crimes_test) <- NULL
+
+# Adjust Borough levels
+queens_crimes$Borough <- NULL
+queens_crimes_test$Borough <- NULL
+df_$Borough <- droplevels(df_$Borough)
+crimes_test$Borough <- droplevels(crimes_test$Borough)
+```
+
+```{r}
+plot(queens_crimes)
+
+# Better inspect three instering predicors
+{
+    par(mfrow = c(2, 2))
+    for (x in c("Year", "Month", "Murder", "TotArrests")) {
+        plot(
+            queens_crimes[[x]], queens_crimes$Shootings,
+            xlab = x, ylab = "Shootings", main = paste(x, "vs Shootings"),
+            pch = 19
+        )
+    }
+    par(mfrow = c(1, 1))
+}
+
+# Compute mean and standard deviation of shootings
+mean(queens_crimes$Shootings)
+sd(queens_crimes$Shootings)
+
+# Time relations
+plot_month_ts(
+    df_ = queens_crimes,
+    y = "Shootings",
+    title = "Shootings in Queens",
+    y_lab = "Shootings Count",
+)
+
+plot_ts_stl_decomposition(
+    df_ = queens_crimes,
+    y = "Shootings",
+    title = "Shootings in Queens"
+)
+
+# Compute the mean per each year
+tapply(queens_crimes$Shootings, queens_crimes$Year, mean)
+
+# Compute the mean per month
+tapply(queens_crimes$Shootings, queens_crimes$Month, mean)
+```
+
+```{r}
+# Linear models
+queens_crimes_lm <- list()
+
+# Null model predicting the mean level
+queens_crimes_lm$null <- lm(Shootings ~ 1, data = queens_crimes)
+lm_diagnostic(queens_crimes_lm$null, residuals = FALSE, effects = FALSE)
+
+queens_crimes[c(10, 43), ]
+
+# Using month levels with constraints they sum up to 0
+contrasts(queens_crimes$MonthName) <- contr.sum(12)
+queens_crimes_lm$month <- lm(Shootings ~ MonthName, data = queens_crimes)
+lm_diagnostic(queens_crimes_lm$month)
+
+plot_coefficients(
+    coefs  = queens_crimes_lm$month$coefficients[2:12],
+    xlab   = "Month",
+    title  = "Queens Month Coefficients",
+    labels = month.abb
+)
+
+
+# Using arrests and murders
+queens_crimes_lm$arrests <- lm(Shootings ~ TotArrests + I(TotArrests^2) + Murder, data = queens_crimes)
+lm_diagnostic(queens_crimes_lm$arrests, effects_sub = c(2, 3))
+
+# Select the best model using step subset selection leaps library
+
+subset_regression_info(
+    subset_reg = regsubsets(
+        Shootings ~ . - TotArrests - YearN - MonthName,
+        data = queens_crimes
+    )
+)
+
+# Select the regsubsets model with 4 predictors
+queens_crimes_lm$auto <- lm(
+    Shootings ~ Month + Mischief + Murder + Trepass,
+    data = queens_crimes
+)
+lm_diagnostic(queens_crimes_lm$auto)
+```
+
+```{r}
+models_stats <- models_prediction_comparison(
+    models = queens_crimes_lm,
+    df_test = queens_crimes_test,
+    y = "Shootings",
+    title = "Shootings in Queens - Test set predictions"
+)
+
+models_stats
+```
+
+
+```{r}
+# Create multiple time series for each different borough in crimes
+plot_multiple_ts(
+    ts_list = lapply(
+        split(df_, df_$Borough),
+        df_to_month_ts,
+        y = "Shootings"
+    ),
+    title = "Shootings in Boroughs",
+    ylab = "Shootings incidents",
+)
+```
+
+
+```{r}
+plot_ccf_grid(
+    df    = df_,
+    y     = "Shootings",
+    level = "Borough"
+)
+```
+
+```{r}
+for (borough in unique(df_$Borough)) {
+    df_ <- df_[df_$Borough == borough, ]
+
+    plot_ts_stl_decomposition(
+        df_ = df_, y = "Shootings", title = paste(borough, "- STL Decomposition")
+    )
+}
+```
+
+```{r}
+levels_scatterplot(
+    df_ = df_,
+    x = "Month",
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings during year across Boroughs",
+    jitter_ = TRUE
+)
+
+boroughs_models_lm <- list()
+```
+
+```{r}
+# Fit a quadratic model with different coefficients for each borough
+boroughs_models_lm$month_quadratic <- lm(
+    Shootings ~ poly(Month, 2) * Borough,
+    data = df_
+)
+summary(boroughs_models_lm$month_quadratic)
+
+lm_diagnostic(boroughs_models_lm$month_quadratic)
+
+model_levels_predictions(
+    model = boroughs_models_lm$month_quadratic,
+    df_ = df_,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings in Borough - Training set",
+    ylab = "Shootings incidents"
+)
+
+model_levels_predictions(
+    model = boroughs_models_lm$month_quadratic,
+    df_ = crimes_test,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings in Borough - Test set",
+    ylab = "Shootings incidents"
+)
+```
+
+```{r}
+# Fit a quadratic model with different coefficients for each borough
+boroughs_models_lm$month_steps <- lm(
+    Shootings ~ MonthName * Borough,
+    data = df_
+)
+summary(boroughs_models_lm$month_steps)
+
+lm_diagnostic(boroughs_models_lm$month_steps)
+
+model_levels_predictions(
+    model = boroughs_models_lm$month_steps,
+    df_ = df_,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings in Borough - Training set",
+    ylab = "Shootings incidents"
+)
+
+model_levels_predictions(
+    model = boroughs_models_lm$month_steps,
+    df_ = crimes_test,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings in Borough - Test set",
+    ylab = "Shootings incidents"
+)
+```
+
+```{r}
+# Add time indicator
+get_epoch <- function(year, month) {
+    (year - 2006) * 12 + month
+}
+
+df_$t <- get_epoch(year = df_$Year, month = df_$Month)
+crimes_test$t <- get_epoch(year = crimes_test$Year, month = crimes_test$Month)
+
+boroughs_models_lm$periodic <- lm(
+    Shootings ~ t + I(t^2) + sin(2 * pi * t / 12) * Borough + cos(2 * pi * t / 12) * Borough,
+    data = df_
+)
+
+lm_diagnostic(boroughs_models_lm$periodic, effects = FALSE)
+
+model_levels_predictions(
+    model = boroughs_models_lm$periodic,
+    df_ = df_,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings in Borough - Training set",
+    ylab = "Shootings incidents"
+)
+
+model_levels_predictions(
+    model = boroughs_models_lm$periodic,
+    df_ = crimes_test,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings in Borough - Test set",
+    ylab = "Shootings incidents"
+)
+```
+
+```{r}
+boroughs_models_lm$totarrests <- lm(
+    Shootings ~ poly(TotArrests, 2) * Borough,
+    data = df_
+)
+
+lm_diagnostic(
+    boroughs_models_lm$totarrests,
+    effects_sub = c(1)
+)
+
+plot_model_lines(
+    model  = boroughs_models_lm$totarrests,
+    df_    = df_,
+    x      = "TotArrests",
+    y      = "Shootings",
+    levels = "Borough",
+    title  = "Shootings in Borough - Training set",
+    ylab   = "Shootings incidents"
+)
+
+plot_model_lines(
+    model  = boroughs_models_lm$totarrests,
+    df_    = crimes_test,
+    x      = "TotArrests",
+    y      = "Shootings",
+    levels = "Borough",
+    title  = "Shootings in Borough - Test set",
+    ylab   = "Shootings incidents"
+)
+
+model_levels_predictions(
+    model = boroughs_models_lm$totarrests,
+    df_ = df_,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings in Borough - Training set",
+    ylab = "Shootings incidents"
+)
+
+model_levels_predictions(
+    model = boroughs_models_lm$totarrests,
+    df_ = crimes_test,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings in Borough - Test set",
+    ylab = "Shootings incidents"
+)
+```
+
+```{r}
+# Shrinkage selection
+for(borough in unique(df_$Borough)) {
+
+    sub <- df_[
+        df_$Borough == borough, 
+        c(crime_names, "Shootings")
+    ]
+
+    mm <- model.matrix(Shootings ~ ., data = sub)
+
+    sub_x <- mm[, -1]  # remove intercept
+    sub_y <- sub$Shootings
+
+    lasso.mod <- glmnet(sub_x, sub_y, alpha = 1)
+
+    plot(lasso.mod, main = paste("Lasso -", borough))
+
+    cv.out <- cv.glmnet(sub_x, sub_y, alpha = 1)
+
+    plot(cv.out) ## lasso path plot
+
+    bestlam.lasso <- cv.out$lambda.min
+    lasso.coef <- predict(lasso.mod, type = "coefficients", s = bestlam.lasso)
+
+    print(paste(borough, "coefficient"))
+    print(lasso.coef)
+    print("")
+    
+
+    plot(lasso.mod, xvar = "lambda", main= paste("Lasso -", borough)) ## notice xvar = "lambda"
+    abline(v = log(bestlam.lasso), lwd = 1.2, lty = "dashed")
+
+}
+
+```
+
+
