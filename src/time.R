@@ -8,27 +8,9 @@
 #'
 
 
-# --- TYPE CONVERSION ---
+# --- CONVERSION ---
 
 
-#' Convert a data frame column to a monthly time series object
-#'
-#' This function takes a data frame and a column name as input and converts the column into a monthly time series object.
-#' The resulting time series object has a frequency of 12, representing monthly data.
-#'
-#' @param df_ The data frame containing the column to be converted
-#' @param y The name of the column to be converted
-#' @return A monthly time series object
-#' 
-#' @examples
-#' df <- data.frame(Year = c(2010, 2010, 2011, 2011),
-#'                  Month = c(1, 2, 1, 2),
-#'                  Value = c(10, 20, 30, 40))
-#' ts_obj <- df_to_month_ts(df, "Value")
-#' print(ts_obj)
-#' 
-#' @export df_to_month_ts
-#' 
 df_to_month_ts <- function(df_, y) {
     
     # Define the time series object
@@ -43,147 +25,93 @@ df_to_month_ts <- function(df_, y) {
     
 }
 
+reshape_postprocess <- function(df_, id.vars) {
 
-# --- PLOTTING UTILS ---
+    # Post process
+    df_ <- data.frame(df_)
+    colnames(df_) <- gsub("X", "", colnames(df_)) 
 
-
-#' Plot Multiple Time Series
-#'
-#' This function plots multiple time series on the same plot.
-#'
-#' @param ts_list A list of time series objects.
-#' @param title The title of the plot.
-#' @param ylab The label for the y-axis.
-#' @param lwd The line width for the time series plots. Default is 1.
-#' @param lty The line type for the time series plots. Default is "solid".
-#' @param legend_pos The position of the legend on the plot. Default is "topleft".
-#'
-#' @return None
-#'
-#' @examples
-#' # Create some time series objects
-#' ts1 <- ts(rnorm(100), start = 2000)
-#' ts2 <- ts(rnorm(100), start = 2000)
-#' ts3 <- ts(rnorm(100), start = 2000)
-#'
-#' # Plot the time series
-#' plot_multiple_ts(list(ts1, ts2, ts3), "Multiple Time Series", "Value")
-plot_multiple_ts <- function(
-    ts_list,
-    title, 
-    ylab, 
-    lwd        = 1, 
-    lty        = "solid", 
-    legend_pos = "topleft"
-) {
-
-    # Plot the first time series
-    plot(
-        ts_list[[names(ts_list)[1]]],
-        ylim = range(unlist(ts_list)),
-        type="l", col=palette()[1],
-        main=title, 
-        xlab="Year", ylab=ylab, 
-        lwd=lwd, lty=lty
+    # Ts conversion
+    df_ts <- melt(
+        df_, 
+        id.vars = id.vars, 
+        variable.name = "YearMonth",
+        value.name = "Count"
     )
-    grid()
 
-    # Add the remaining time series to the plot
-    for(i in 2:length(ts_list)) {
-        i_name = names(ts_list)[i]
-        lines(
-            ts_list[[i_name]], type="l", 
-            lwd=lwd, lty=lty, 
-            col=get_palette_color(i)
+    df_ts$YearMonth <- as.Date(
+        paste0(df_ts$YearMonth, "01"), 
+        format = "%Y%b%d"
+    )
+
+    return(df_ts)
+
+}
+
+ts_crimes_reshape <- function(df_) {
+
+    # Pivot to long format
+    df_long <- df_ %>%
+        pivot_longer(
+            cols = -c(MonthName, Year), 
+            names_to = "CrimeType", 
+            values_to = "Count"
         )
+    
+    # Combine Year and MonthName into a single column
+    df_long <- df_long %>%
+        mutate(
+            YearMonth = paste(formatC(Year, width = 4, flag = "0"), MonthName, sep = ""))
+
+    # Sort by Year and MonthName
+    df_long <- df_long %>%
+        arrange(Year, MonthName)
+
+    # Pivot back to wide format
+    df_wide <- df_long %>%
+        select(-MonthName, -Year) %>%
+        pivot_wider(names_from = YearMonth, values_from = Count)  
+    
+    return(reshape_postprocess(df_=df_wide, id.vars="CrimeType"))
+    
+}
+
+ts_borough_reshape <- function(df_, crime_type) {
+
+    # Pivot to long format
+    df_long <- df_ %>%
+        mutate(MonthName = factor(MonthName, levels = month.abb)) %>%
+        mutate(YearMonth = paste(formatC(Year, width = 4, flag = "0"), MonthName, sep = "")) %>%
+        arrange(Borough, Year, MonthName)
+
+    # Pivot back to wide format
+    df_wide <- df_long %>%
+        select(-MonthName, -Year) %>%
+        pivot_wider(names_from = YearMonth, values_from = !!crime_type)
+
+    return(reshape_postprocess(df_=df_wide, id.vars="Borough"))
+
+}
+
+fractional_year_to_date <- function(fractional_year) {
+        # Separate the year and the fractional part
+        year <- floor(fractional_year)
+        fraction <- fractional_year - year
+        
+        # Convert the fractional part to days (approximate)
+        days_in_year <- 365
+        day_of_year <- round(fraction * days_in_year)
+        
+        # Construct the date
+        date <- ymd(paste0(year, "-01-01")) + days(day_of_year)
+        
+        return(date)
     }
-
-    # Add legend
-    legend(
-        legend_pos, 
-        legend=names(ts_list), 
-        cex = 0.6,
-        lty=lty, 
-        lwd=lwd,
-        col=palette()[1:length(ts_list)]
-    )
-
-}
-
-
-#' Plot Monthly Time Series
-#'
-#' This function plots a monthly time series from a data frame.
-#'
-#' @param df_ The data frame containing the time series data.
-#' @param y The column name of the time series variable in the data frame.
-#' @param title The title of the plot (optional).
-#' @param y_lab The label for the y-axis (optional, default is "Count").
-#' @param x_ticks The number of x-axis ticks to display (optional, default is 1).
-#' 
-#' @return None
-#' 
-#' @examples
-#' 
-#' df <- data.frame(
-#'  Year = rep(2019, 12),
-#'  Month = 1:12,
-#'  Shootings = c(10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60)
-#' )
-#' 
-#' plot_month_ts(df, "Shootings", "Monthly Shootings")
-#'
-#' @export plot_month_ts
-#'
-plot_month_ts <- function(
-    df_, y, 
-    title   = "", 
-    y_lab   = "Count",
-    x_ticks = 1
-) {
-    
-    # Define the time series object
-    month_ts <- df_to_month_ts(df_, y=y)
-
-    # Plot the time series, avoiding the default x-axis labels
-    plot(
-        month_ts, 
-        xlab = "Year", ylab = paste(y, "Count"),
-        main = title,  xaxt = "n"
-    )
-
-    # Add custom x-axis labels
-    axis(
-        side = 1, 
-        at = seq(min(df_$Year)-1, max(df_$Year) + 1, x_ticks)
-    )
-
-    # Add a grid
-    grid()
-    
-}
 
 
 # --- TIME SERIES ANALYSIS ---
 
 
-#' Plot Cross-Correlation Function (CCF) for Features
-#'
-#' This function plots the Cross-Correlation Function (CCF) between each feature
-#' in a given data frame and a target variable.
-#'
-#' @param df_ The data frame containing the features and the target variable.
-#' @param features A character vector specifying the names of the features to plot.
-#' @param y The name of the target variable.
-#' @param lag.max The maximum lag to consider in the CCF calculation.
-#' @param cex.main The font size for the main title of each plot.
-#'
-#' @return None (plots are displayed on the screen).
-#'
-#' @examples
-#' # Assuming df_ is a data frame with columns "feature1", "feature2", and "target"
-#' plot_feature_ccf(df_, c("feature1", "feature2"), "target", lag.max = 36, cex.main = 0.8)
-#'
 plot_feature_ccf <- function(
     df_,
     features,
@@ -213,26 +141,6 @@ plot_feature_ccf <- function(
     }
 }
 
-
-#' Plot Cross-Correlation Function (CCF) Grid
-#'
-#' This function plots the cross-correlation function (CCF) grid for a given data frame.
-#'
-#' @param df The data frame containing the data.
-#' @param y The variable of interest.
-#' @param level The grouping variable.
-#'
-#' @return None
-#'
-#' @examples
-#' df <- data.frame(
-#'   x = rnorm(100),
-#'   y = rnorm(100),
-#'   group = rep(c("A", "B"), 50)
-#' )
-#' plot_ccf_grid(df, "y", "group")
-#'
-#' @export
 plot_ccf_grid <- function(
     df,
     y,
@@ -277,29 +185,6 @@ plot_ccf_grid <- function(
 }
 
 
-#' Plot the STL decomposition of a time series
-#'
-#' This function takes a data frame and a column name representing a time series,
-#' and plots the seasonal, trend, and residual components of the time series using
-#' the STL (Seasonal and Trend decomposition using Loess) method.
-#'
-#' @param df_ The data frame containing the time series data.
-#' @param y The column name representing the time series.
-#' @param title The title for the plot (optional).
-#'
-#' @return None
-#' 
-#' @examples
-#' df <- data.frame(
-#'  Year = rep(2019, 12),
-#'  Month = 1:12,
-#'  Shootings = c(10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60)
-#' )
-#' 
-#' plot_ts_stl_decomposition(df, "Shootings", "STL Decomposition of Shootings")
-#' 
-#' @export plot_ts_stl_decomposition
-#'
 plot_ts_stl_decomposition <- function(
     df_, y, 
     title = ""
@@ -312,4 +197,62 @@ plot_ts_stl_decomposition <- function(
     plot(stl(month_ts, s.window = "periodic"), main = title)
     grid()
     
+}
+
+
+outliers_diagnostic <- function(df_, colors, y, title="", ylab="") {
+
+  # Plot the original time series
+  p <- plot_ts(
+    ts_crimes_reshape(
+        df_=df_[, c("Year", "MonthName", y)]
+    ),
+    group = "CrimeType",
+    y = y,
+    col = colors$ts,
+    ylab = "Shootings",
+    title = title,
+    lwd = 0.7,
+    ticks  =5
+  )
+
+  ts <- df_to_month_ts(df_, y=y)
+  
+  # Extract outliers index and times 
+  outliers <- tsoutliers(ts)
+  idx      <- outliers$index
+  times    <- time(ts)[idx]
+  
+  # Extract old and new observations
+  old  <- ts[idx]
+  new_ <- as.integer(outliers$replacements)
+  
+
+  df_outliers <- data.frame(
+    Time = as.Date(rep(unlist((
+        lapply(times, fractional_year_to_date)
+    )), 2)),
+    Value = c(old, new_),
+    Label = c(rep("Old", length(old)), rep("New", length(new_)))
+  )
+
+    
+    p <- p + geom_point(
+        data = df_outliers,
+        aes(x = Time, y = Value, color = Label),
+        size = 2
+    ) +
+        scale_color_manual(values=c(colors$old, colors$new))
+
+    df_outliers <- reshape(
+        df_outliers,
+        idvar = "Time", timevar = "Label", 
+        direction = "wide"
+    )
+
+    return(list(
+        plot = p,
+        outliers = df_outliers
+    ))
+
 }

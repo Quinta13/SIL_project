@@ -5,9 +5,11 @@ date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
     html_document:
         toc: true
-    pdf_document:
-        toc: true
+        toc_float: true
+        theme: cerulean
+        highlight: tango
 ---
+
 
 ## 1. Introduction
 
@@ -18,46 +20,36 @@ This document describes the data preprocessing phase of the project. The goal is
 
 The preprocissing has the goal of build a monthly dataset specifying the number of **shootings** and arrests for each borough and **crime type**. 
 
-```{r setup, echo=FALSE}
+```{r setup, echo=FALSE, include=FALSE}
 
 # Don't display code in the final document
 knitr::opts_chunk$set(echo=FALSE)
 
-# Set English language
-Sys.setlocale("LC_TIME", "en_US.UTF-8")
-
-# Clear the environment
-rm(list = ls())
-
-# Load libraries
-library("chron") # manipulate timedays
-
 # Load R script sources
-source("src/settings.R")
+source("src/init.R")
 ```
 
 ```{r names}
 
+# Columns to manipulate
 SHOOTINGS_COLS <- c("INCIDENT_KEY", "OCCUR_DATE",  "BORO")
 ARRESTS_COLS   <- c("ARREST_KEY",   "ARREST_DATE", "ARREST_BORO", "PD_DESC")
 
 # Name mappings
-
 BOROUGH_LETTER_MAP <- c(
-    "S" = "STATEN ISLAND",
+    "B" = "BRONX",
     "K" = "BROOKLYN",
     "M" = "MANHATTAN",
-    "B" = "BRONX",
-    "Q" = "QUEENS"
+    "Q" = "QUEENS",
+    "S" = "STATEN ISLAND"
 )
 
 BOROUGH_LOWERCASE_MAP <- c(
-    "STATEN ISLAND" = "StatenIsland",
+    "BRONX"         = "Bronx",
     "BROOKLYN"      = "Brooklyn",
     "MANHATTAN"     = "Manhattan",
-    "BRONX"         = "Bronx",
     "QUEENS"        = "Queens",
-    "NEW YORK"      = "NewYork"
+    "STATEN ISLAND" = "StatenIsland"
 )
 
 CRIME_TYPES <- list(
@@ -86,7 +78,7 @@ CRIME_TYPES <- list(
         "LICENSING FIREARMS",              "FIREARMS LICENSING LAWS"
     ),
 
-    # Possesso/vendita di sostanza controllata
+    # Possesso e vendita di sostanza soggetta a controlli
     SubstancePossession = c(  
         "CONTROLLED SUBSTANCE, POSSESSION 7", "CONTROLLED SUBSTANCE,INTENT TO SELL 3",  "CONTROLLED SUBSTANCE,SALE 3",
         "CONTROLLED SUBSTANCE, POSSESSI",     "CONTROLLED SUBSTANCE, INTENT TO SELL 5", "CONTROLLED SUBSTANCE,INTENT TO",
@@ -170,7 +162,7 @@ We load and preprocess the **shootings dataset** [`shootings.csv`](/data/shootin
 
 ```{r load shootings}
 
-shootings <- read.csv(FILE_PATHS$Shootings)
+shootings <- read.csv(PATHS$Shootings)
 
 ```
 
@@ -183,12 +175,12 @@ shootings <- shootings[, SHOOTINGS_COLS]
 shootings$OCCUR_DATE <- as.Date(shootings$OCCUR_DATE, format = "%m/%d/%Y")
 
 # Cast Borough to factor
-shootings$Borough       <- as.factor(shootings$BORO)
-shootings$BORO          <- NULL
+shootings$Borough <- as.factor(shootings$BORO)
+shootings$BORO    <- NULL
 
 # Extract time features
-shootings$Year    <- as.numeric(format(shootings$OCCUR_DATE, "%Y"))
-shootings$Month   <- as.numeric(format(shootings$OCCUR_DATE, "%m"))
+shootings$Year  <- as.numeric(format(shootings$OCCUR_DATE, "%Y"))
+shootings$Month <- as.numeric(format(shootings$OCCUR_DATE, "%m"))
 
 # Save the first and last date
 date.first <- min(shootings$OCCUR_DATE)
@@ -200,7 +192,7 @@ head(shootings)
 summary(shootings)
 ```
 
-We aggregate the shootings data by year, month and borough to have a count of shootings for each month and borough.
+We aggregate the shootings data by year, month and Borough to have a count of shootings for each month and borough.
 
 ```{r shootings month aggregation}
 
@@ -243,11 +235,11 @@ rm(shootings_month_dummy)
 head(shootings_month)
 ```
 
-The final dataset consists of $1080$ rows and $4$ columns. Each row represent:
+The final dataset consists of `r nrow(shootings_month)` rows and `r ncol(shootings_month)` columns. Each row represent:
 
-- 5 different boroughs in column `Borough`.
-- 12 months in column `Month`.
-- 18 years, from 2006 to 2023, in column `Year`
+- `r length(unique(shootings_month$Borough))` different boroughs in column `Borough`.
+- `r length(unique(shootings_month$Month))` months in column `Month`.
+- `r max(shootings_month$Year) - min(shootings_month$Year) + 1` years, from `r min(shootings_month$Year)` to `r max(shootings_month$Year)`, in column `Year`
 
 The feature `Shootings` represent the number of shootings in the considered area and period.
 
@@ -260,7 +252,7 @@ summary(shootings_month)
 ```
 
 
-# 3. Arrests data
+## 3. Arrests data
 
 As we did for the shooting data, we load and preprocess the **arrests dataset** [`arrests.csv`](/data/arrests.csv) and we crate the columns suitable for aggregation purposes. In addition to the year, month and borough, we also need to take in consideration the specific **crime type** the arrest occured.
 We only keep the type of crimes most frequent fifteen and possibily related with shootings. The crime types are the following : Assuault, Marijuana possesion and sell, Theft, Firearm, SubstancePossession, Robbery, Weapons possesion, Drug paraphernalia, Larceny, Mischief, Trepass, Burglary, Bribery, Murder and Forgery.
@@ -268,7 +260,7 @@ We only keep the type of crimes most frequent fifteen and possibily related with
 
 ```{r load arrests}
 
-arrests <- read.csv(FILE_PATHS$Arrests)
+arrests <- read.csv(PATHS$Arrests)
 
 ```
 
@@ -298,6 +290,7 @@ arrests$ARREST_DATE  <- NULL
 arrests$ARREST_BORO  <- NULL
 
 head(arrests)
+summary(arrests)
 
 ```
 
@@ -346,15 +339,14 @@ head(arrests_month)
 
 The final dataset consists of $16200$ rows and $5$ columns. Each row represent:
 
-- 5 different boroughs in column `Borough`.
-- 12 months in column `Month`.
-- 18 years, from 2006 to 2023, in column `Year`
-- 15 different crime types in column `Crime`
+- `r length(unique(shootings_month$Borough))` different boroughs in column `Borough`.
+- `r length(unique(shootings_month$Month))` months in column `Month`.
+- `r max(shootings_month$Year) - min(shootings_month$Year) + 1` years, from `r min(shootings_month$Year)` to `r max(shootings_month$Year)`, in column `Year`.
+- `r length(unique(shootings_month$Crimes))` different crime types in column `Crime`.
 
 The `Arrests` feature represent the number of arrests in the considered area and period.
 
 However we prefer to rehsape the dataset to use the crime type as column in order to make the dataset suitable for the merge with shooting one.
-
 
 ```{r arrests reshaping}
 
@@ -371,7 +363,6 @@ names(arrests_month) <- gsub("Arrests.", "", names(arrests_month))
 arrests_month$TotArrests <- rowSums(arrests_month[, 4:ncol(arrests_month)], na.rm = TRUE)
 
 head(arrests_month)
-
 ```
 
 The final summary of the dataset is the following.
@@ -412,20 +403,22 @@ head(nyc_month_crimes)
 
 ```
 
-The final dataset has $1080$ rows and $20$ columns. Each row represent:
+The final dataset has `r nrow(nyc_month_crimes)` rows and `r ncol(nyc_month_crimes)` columns. Each row represent:
 
-- 5 different boroughs in column `Borough`.
-- 12 months in column `Month`.
-- 18 years, from 2006 to 2023, in column `Year`.
-- 15 different crime types, plus their total in column `TotArrests`.
+
+- `r length(unique(shootings_month$Borough))` different boroughs in column `Borough`.
+- `r length(unique(shootings_month$Month))` months in column `Month`.
+- `r max(shootings_month$Year) - min(shootings_month$Year) + 1` years, from `r min(shootings_month$Year)` to `r max(shootings_month$Year)`, in column `Year`.
+- `r 15` different crime columns, plus their total in column `TotArrests`.
 - The `Shootings` feature represent the number of shootings in the considered area and period.
+
 
 ```{r save datasets}
 
 summary(nyc_month_crimes)
 
 # Save the datasets
-write.csv(nyc_month_crimes, FILE_PATHS$NycMonthCrimes, row.names = FALSE)
+write.csv(nyc_month_crimes, PATHS$NycMonthCrimes, row.names = FALSE)
 
 ```
 

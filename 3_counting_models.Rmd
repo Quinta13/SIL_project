@@ -1,0 +1,125 @@
+---
+title: "NYC Shootings and Arrests - Data analysis"
+author: "Sebastiano Quintavale - 878500"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+    html_document:
+        toc: true
+        toc_float: true
+        number_sections: true
+        theme: cerulean
+        highlight: tango
+---
+
+```{r echo=FALSE, include=FALSE}
+
+# 1. RMardown styling
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(fig.width = 12, fig.height = 8)
+
+# 2. Project environment setup
+source("src/init.R")
+```
+
+```{r}
+# Load data
+crimes <- read.csv(PATHS$NycMonthCrimes)
+```
+```{r}
+crime_names <- colnames(crimes)[4:(length(colnames(crimes)) - 2)]
+
+# Add discrete version for Month and Year
+crimes <- prepare_crimes(crimes_df = crimes)
+
+# Split Train and Test
+split <- train_test_split_by_year(df_ = crimes, year_test = YEAR_TEST)
+crimes <- split$train
+crimes_test <- split$test
+rm(split)
+
+summary(crimes)
+```
+
+```{r}
+# Take apart Queens from the borough and recompute the total
+split_out <- split_queens(crimes, crimes_test)
+
+crimes             <- split_out$crimes
+crimes_test        <- split_out$crimes_test
+queens_crimes      <- split_out$queens_crimes
+queens_crimes_test <- split_out$queens_crimes_test
+
+rm(split_out)
+
+```
+
+```{r}
+
+# Add constrast
+
+contrasts(crimes$MonthName) <- contr.sum(12)
+contrasts(crimes$Borough)   <- contr.sum(4)
+
+crimes_pois_models <- list()
+
+tapply(crimes$Shootings, crimes$Borough, mean)
+tapply(crimes$Shootings, crimes$Borough, var)
+
+crimes_pois_models$full <- glm(
+    Shootings ~ . - Month - TotArrests,
+    data = crimes,
+    family = poisson
+)
+
+summary(crimes)
+
+AIC(crimes_pois_models$full)
+BIC(crimes_pois_models$full)
+
+plot_model_predictions_per_level_over_time(
+    model = crimes_pois_models$full,
+    df_ = crimes,
+    y = "Shootings",
+    levels = "Borough",
+    title = "AAA",
+    ylab = "Shootings incidents",
+    ci = TRUE,
+    lwd = 0.5,
+    lwd_observations = 0.5,
+    colors = PALETTE$boroughs,
+    grid_rows = 2
+)
+
+crimes$MonthName <- as.factor(crimes$MonthName)
+crimes$Borough <- as.factor(crimes$Borough)
+
+contrasts(crimes$MonthName) <- contr.sum(length(levels(crimes$MonthName)))
+contrasts(crimes$Borough)   <- contr.sum(length(levels(crimes$Borough)))
+
+
+crimes_pois_models <- list()
+
+crimes_pois_models$full <- glm(
+    Shootings ~ . - Month - TotArrests,
+    data = crimes,
+    family = poisson
+)
+
+predict(
+    object = crimes_pois_models$full,
+    newdata = crimes,
+    type = "response"
+)
+
+residualPlots(crimes_pois_models$full)
+
+
+
+
+
+
+```
+
+```{r}
+summary(crimes_pois_models$full)
+```
