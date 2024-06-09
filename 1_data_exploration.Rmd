@@ -1,12 +1,11 @@
 ---
-title: "NYC Shootings and Arrests - Data analysis"
+title: "NYC Shootings and Arrests - Data exploration"
 author: "Sebastiano Quintavale - 878500"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
     html_document:
         toc: true
         toc_float: true
-        number_sections: true
         theme: cerulean
         highlight: tango
 ---
@@ -16,8 +15,8 @@ output:
 ```{r echo=FALSE, include=FALSE}
 
 # 1. RMardown styling
-knitr::opts_chunk$set(echo = FALSE)
-knitr::opts_chunk$set(fig.width = 12, fig.height = 8)
+knitr::opts_chunk$set(echo=FALSE)
+knitr::opts_chunk$set(fig.width=12, fig.height=8)
 
 # 2. Project environment setup
 source("src/init.R")
@@ -26,21 +25,21 @@ source("src/init.R")
 
 
 ### Data preparation
+
+Load the data and prepare it for the analysis.
 ```{r}
 
 # Load data
 crimes <- read.csv(PATHS$NycMonthCrimes)
 
+CRIME_NAMES <- c(CRIME_NAMES, "MarijuanaSellPossession")
+
 ```
 
 The dataset has `r nrow(crimes)` rows and `r ncol(crimes)` columns.
 
-```{r}
 
-# Save the names of the crimes (excluding TotArrests)
-crime_names <- colnames(crimes)[4:(length(colnames(crimes)) - 2)]
-
-```
+View some rows and summary of the dataset.
 
 ```{r}
 
@@ -53,6 +52,10 @@ head(crimes)
 ```
 
 ### Train and Test split
+
+We split train and test across years. 
+Cannot apply cross validation for time dependence.
+The dataset covers r`length(unique(crimes$Year))` years, we use the last r`length(YEAR_TEST)` for the test: r`YEAR_TEST`.
 
 ```{r}
 
@@ -73,13 +76,15 @@ rm(split)
 
 ### Time series
 
+We start by plotting the time series of the crimes and shootings over the years.
+
 ```{r}
 
 plot_multiple_ts(
     df_ts = ts_crimes_reshape(
         aggregate(
             . ~ Year + MonthName,
-            data = crimes[, c("Year", "MonthName", crime_names, "Shootings")], # Remove Borough, Month, TotArrests
+            data = crimes[, c("Year", "MonthName", CRIME_NAMES, "Shootings")], # Remove Borough, Month, TotArrests
             FUN = sum
         )
     ),
@@ -93,6 +98,9 @@ plot_multiple_ts(
 )
 
 ```
+
+We better visualize the time series for each borough.
+
 
 ```{r fig.width=16, fig.height=12}
 
@@ -138,13 +146,16 @@ plot_in_grid <- function(plot_list, ncol = 1, title = "") {
 
 ts_plots <- list()
 
-for (crime_name in crime_names) {
+for (i in 1:length(CRIME_NAMES)) {
+
+    crime_name <- CRIME_NAMES[i]
 
     ts_plots[[crime_name]] <- plot_multiple_ts(
         df_ts = ts_borough_reshape(
             df_ = crimes[, c("Borough", "Year", "MonthName", crime_name)],
             crime_type = crime_name
         ),
+        ylab   = ifelse((i-1) %% 5 == 0, "Arrests", ""),
         group  = "Borough",
         title  = paste(crime_name),
         lwd    = 0.6,
@@ -156,20 +167,25 @@ for (crime_name in crime_names) {
 
 }
 
+
 plot_in_grid(
     plot_list = ts_plots,
     ncol = 5,
     title = "Crimes in NYC - 2006 to 2021"
 )
 
+rm(ts_plots)
 
 ```
 
+Some comments
+
+Let's see total number compared with the shootings.
 ```{r}
 
 ts_plots <- list()
 
-for (crime_name in c("TotArrests", "SqrtTotArrests")) {
+for (crime_name in c("TotArrests", "Shootings")) {
 
     ts_plots[[crime_name]] <- plot_multiple_ts(
         df_ts = ts_borough_reshape(
@@ -178,7 +194,7 @@ for (crime_name in c("TotArrests", "SqrtTotArrests")) {
         ),
         group  = "Borough",
         xlab   = "Year",
-        ylab   = "Total Arrests",
+        ylab   = ifelse(crime_name=="TotArrests", "Arrests", "Shootings"),
         title  = paste(crime_name),
         lwd    = 0.6,
         colors = unlist(PALETTE$boroughs),
@@ -191,22 +207,10 @@ for (crime_name in c("TotArrests", "SqrtTotArrests")) {
 plot_in_grid(
     plot_list = ts_plots,
     ncol = 2,
-    title = "Total Arrests in NYC - 2006 to 2021"
+    title = "Arrests and Shootings in NYC - 2006 to 2021"
 )
 
-plot_multiple_ts(
-    df_ts = ts_borough_reshape(
-        df_ = crimes[, c("Borough", "Year", "MonthName", "Shootings")],
-        crime_type = "Shootings"
-    ),
-    group  = "Borough",
-    xlab   = "Year",
-    ylab   = "Shootings Incidents",
-    title  = "Shootings in NYC - 2006 to 2021",
-    lwd    = 0.6,
-    colors = unlist(PALETTE$boroughs),
-    ticks  = 10,
-)
+rm(ts_plots)
 
 ```
 
@@ -214,32 +218,49 @@ plot_multiple_ts(
 
 ### Principal Component Analysis
 
+Let's see PCA variablity for different boroughs.
+
 ```{r fig.width = 8, fig.height = 6}
 
 pca_analysis(
-    df_       = crimes,
-    features  = c(crime_names, "Shootings"),
-    levels    = "Borough",
-    title     = "PCA - Crimes in NYC"
-)
-
-pca_analysis(
-    df_       = crimes[crimes$Borough != "StatenIsland", ],
-    features  = c(crime_names, "Shootings"),
-    levels    = "Borough",
-    title     = "PCA - Crimes in NYC"
-)
-
-pca_analysis(
-    df_       = crimes[!(crimes$Borough %in% c("Queens", "StatenIsland")), ],
-    features  = c(crime_names, "Shootings"),
-    levels    = "Borough",
-    title     = "PCA - Crimes in NYC"
+    df_          = crimes,
+    features     = c(CRIME_NAMES, "Shootings"),
+    levels       = "Borough",
+    biplot_title = "PCA - Crimes in NYC",
+    individuals  = "Boroughs - PCA",
+    variables    = "Crimes - PCA",
 )
 ```
 
+StatnIsland not crime area.
 ```{r}
-crimes_v2 <- crimes[, -c(19)] %>%
+
+pca_analysis(
+    df_       = crimes[crimes$Borough != "StatenIsland", ],
+    features  = c(CRIME_NAMES, "Shootings"),
+    levels    = "Borough",
+    biplot_title     = "PCA - Crimes in NYC",
+    explained = FALSE, individual_vars = FALSE
+)
+```
+
+Quuens really few variability
+
+```{r}
+pca_analysis(
+    df_       = crimes[!(crimes$Borough %in% c("Queens", "StatenIsland")), ],
+    features  = c(CRIME_NAMES, "Shootings"),
+    levels    = "Borough",
+    biplot_title     = "PCA - Crimes in NYC",
+    explained = FALSE, individual_vars = FALSE
+)
+```
+
+Most in Brooklyn and Bronx. We see shootings same variability of Assaults and Shootings.
+
+See the opposite view.
+```{r}
+crimes_v2 <- crimes[, -c(19, 22)] %>% # Remove TotArrests and SqrtTotArrests
     pivot_longer(
         cols = -(c(Borough, Year, Month, MonthName)),
         names_to = "CrimeType",
@@ -254,8 +275,10 @@ crimes_v2$CrimeType <- as.factor(crimes_v2$CrimeType)
 pca_analysis(
     df_       = crimes_v2,
     features  = levels(crimes$Borough),
-    levels    = "CrimeType",
-    title     = "PCA - Crimes in NYC"
+    levels       = "CrimeType",
+    biplot_title = "PCA - Crimes in NYC",
+    individuals  = "Crimes - PCA",
+    variables    = "Borough - PCA",
 )
 
 rm(crimes_v2)
@@ -263,6 +286,8 @@ rm(crimes_v2)
 ```
 
 ### Scatterplots
+
+See scatterplots of time variabiles. Year and Month.
 ```{r}
 
 BOROUGH_LEGEND <- extract_legend(
@@ -293,7 +318,8 @@ for (time in c("Year", "Month")) {
         shape   = 19,
         size    = 1,
         colors  = unlist(PALETTE$boroughs),
-        legend  = FALSE
+        legend  = FALSE,
+        ylab    = ifelse(time=="Year", "Shootings incidents", "")
     )
 }
 
@@ -303,18 +329,27 @@ plot_in_grid(
     title = "Shootings in NYC over time"
 )
 
+rm(scatterplots)
+
 ```
+
+Trend in the year with drop in 2020.
+Seasonality with higher shootings in summer.
 
 ```{r}
 
 scatterplots <- list()
 
 # Plots
-for (crime in crime_names) {
+for (i in 1:length(CRIME_NAMES)) {
+
+    crime <- CRIME_NAMES[i]
+
     scatterplots[[crime]] <- levels_scatterplot(
         df_     = crimes,
         x       = crime,
         y       = "Shootings",
+        ylab    = ifelse((i-1) %% 5 == 0, "Shootings", ""),
         levels  = "Borough",
         title   = paste(crime),
         title_size = 9,
@@ -330,36 +365,29 @@ for (crime in crime_names) {
 plot_in_grid(
     plot_list = scatterplots,
     ncol = 5,
-    title = "Crimes impact on shootings"
+    title = "Crimes impact on shootings in NYC - 2006 to 2023"
 )
+
+rm(scatterplots)
 
 ```
 
 ```{r}
-scatterplots <- list()
 
-# Plots
-for (crime in c("TotArrests", "SqrtTotArrests")) {
-    scatterplots[[crime]] <- levels_scatterplot(
-        df_     = crimes,
-        x       = crime,
-        y       = "Shootings",
-        levels  = "Borough",
-        title   = paste(crime),
-        title_size = 9,
-        jitter_ = TRUE,
-        ticks   = 3,
-        shape   = 19,
-        size    = 1.5,
-        colors  = unlist(PALETTE$boroughs),
-        legend  = FALSE
-    )
-}
-
-plot_in_grid(
-    plot_list = scatterplots,
-    ncol = 2,
-    title = "Crimes and shootings interaction"
+levels_scatterplot(
+    df_     = crimes,
+    x       = "TotArrests",
+    y       = "Shootings",
+    xlab    = "Arrests",
+    ylab    = "Shootings",
+    levels  = "Borough",
+    title   = "Total Arrests impact on  Shootings in NYC - 2016 to 2023",
+    title_size = 14,
+    jitter_ = TRUE,
+    ticks   = 3,
+    shape   = 19,
+    size    = 1.5,
+    colors  = unlist(PALETTE$boroughs)
 )
 
 
@@ -378,22 +406,82 @@ Remarks:
 
 ### Outliers
 
+Outliers substitution
+
+Use tso 
+
+
 ```{r}
-# Extract outliers
-crimes[
-    crimes$TotArrests < 2000 &
-        crimes$Shootings > 100,
-]
+plot_multiple_ts(
+    df_ts = ts_borough_reshape(
+        df_ = crimes[, c("Borough", "Year", "MonthName", "Shootings")],
+        crime_type = "Shootings"
+    ),
+    group = "Borough",
+    xlab = "Year",
+    ylab = "Incidents",
+    title = paste("Shootings in NYC"),
+    lwd = 0.7,
+    colors = unlist(PALETTE$boroughs)
+)
+
+palette_outlier <- PALETTE$outliers
+
+plots <- list()
+
+for(borough in levels(crimes$Borough)) {
+
+    palette_outlier$ts <- PALETTE$boroughs[[borough]]
+
+    outliers_out <- outliers_diagnostic(
+        df_ = crimes[crimes$Borough == borough,],
+        y = "Shootings",
+        colors = palette_outlier,
+        title = borough,
+        ylab = "Shootings incidents"
+    )
+
+    plots[[borough]] <- outliers_out$plot
+    
+
+    crimes <- replace_outliers(
+        df_=crimes,
+        y = "Shootings",
+        outliers = outliers_out$outliers,
+        level=borough
+    )
+
+}
+
+grid.arrange(grobs=plots, ncol=2)
+
+rm(list=c("plots", "palette_outlier"))
+
+```
+https://www.nytimes.com/2020/09/02/nyregion/nyc-shootings-murders.html
+
+Here new data
+```{r}
+plot_multiple_ts(
+    df_ts = ts_borough_reshape(
+        df_ = crimes[, c("Borough", "Year", "MonthName", "Shootings")],
+        crime_type = "Shootings"
+    ),
+    group = "Borough",
+    xlab = "Year",
+    ylab = "Incidents",
+    title = paste("Shootings in NYC"),
+    lwd = 0.7,
+    colors = unlist(PALETTE$boroughs)
+)
 ```
 
-Use tso to detect outliers in the time series ?
-Treat as missing and use PCA to impute it ?
 
-
-https://www.nytimes.com/2020/09/02/nyregion/nyc-shootings-murders.html
 
 ### Larceny clusters
 
+
+Isseu with Larceny that had a step time series and two clusters
 ```{r}
 
 levels_scatterplot(
@@ -411,12 +499,17 @@ levels_scatterplot(
     size    = 1.5,
     colors  = unlist(PALETTE$boroughs)
 )
+```
+
+Divide in two areas
+
+```{r}
 
 larceny_plots <- list()
 for(level in levels(crimes$Borough)) {
 
     df_level <- crimes[crimes$Borough == level, ]
-    df_level$Condition <- as.factor(ifelse(
+    df_level$Period <- as.factor(ifelse(
         df_level$Year %in% 2014:2019, "A", "B"
     ))
 
@@ -426,7 +519,7 @@ for(level in levels(crimes$Borough)) {
         y       = "Shootings",
         xlab    = "Larceny",
         ylab    = "Shootings",
-        levels  = "Condition",
+        levels  = "Period",
         title   = paste("Larceny - ", level),
         title_size = 12,
         jitter_ = TRUE,
@@ -444,9 +537,57 @@ grid.arrange(
     ncol = 2
 )
 
+rm(larceny_plots)
+
 ```
 
-### Marijuana outliers
+Problem for simpson paradox 
+
+```{r}
+df_level <- crimes[crimes$Borough == "Bronx", ]
+df_level$Period <- as.factor(ifelse(
+    df_level$Year %in% 2014:2019, "A", "B"
+))
+
+fit_1 <- lm(Shootings ~ Larceny, data = df_level)
+coefficients(fit_1)
+
+fit_2 <- lm(Shootings ~ Larceny + Period, data = df_level)
+coefficients(fit_2)
+
+grid.arrange(
+    grobs = list(
+        fit1 = plot_model_prediction(
+            df_=df_level,
+            model=fit_1,
+            points_size = 2,
+            xlab = "Larceny arrests", ylab = "Shootings incidents",
+            x="Larceny", y="Shootings"
+        ),
+        fit2 = plot_model_prediction_per_level(
+            df_=df_level,
+            model=fit_2,
+            x="Larceny", y="Shootings", levels="Period",
+            points_size = 2,
+            colors  = c("blue", "orange"),
+            xlab = "Larceny arrests", ylab = "Shootings incidents"
+        )
+    ),
+    ncol = 2,
+    top = grid::textGrob(
+        "Larceny in NYC (Bronx) - Simpson Paradox", 
+        gp = grid::gpar(fontsize = 16, fontface = "bold")
+    )
+)
+
+rm(list = c("fit1", "fit2", "df_level"))
+
+
+```
+
+
+
+### Marijuana zero arrests
 
 ```{r}
 
@@ -495,6 +636,8 @@ summary(as.factor(crimes[
 
 ```
 
+Problem with marijuana with zero arrests (not that there is jitter in the plot)
+
 ```{r}
 # Create a new column that is the sum of MarijuanaSellPOssesion and SubstancePossession
 crimes$SubstanceAndMarijuanaPossession <- crimes$SubstancePossession + crimes$MarijuanaSellPossession
@@ -521,15 +664,20 @@ crimes[
     crimes$Shootings > 50, 
     c("Borough", "Year", "SubstancePossession", "MarijuanaSellPossession", "Shootings")
 ]
+
 ```
 
+Seem no record of marijuana after 2021
+
 ### Crimes correlation
+
+Investigate collinearity by fitting the full model.
 
 ```{r}
 
 full_model <- lm(
     Shootings ~ .,
-    data = crimes[, c("Shootings", crime_names)]
+    data = crimes[, c("Shootings", CRIME_NAMES)]
 )
 
 summary(full_model)
@@ -538,62 +686,94 @@ plot(allEffects(full_model))
 
 vif_diagnostic(full_model) 
 
+rm(full_model)
+
 ```
+
+We now all are positive correlated, negative correlation synyomatic of collinearity. 
+Also VIF index says is.
+
+
+There is strong evidence. 
 
 ```{r}
-plot_correlation_matrix <- function(df) {
-
-    # Compute the correlation matrix for numeric columns
-    numeric_cols <- sapply(df, is.numeric)
-    cor_matrix   <- cor(df[, numeric_cols], use = "complete.obs")
-
-    # Visualize the correlation matrix using corrplot
-    corrplot(
-        cor_matrix, 
-        method = "color",
-        addCoef.col = "black",
-        number.cex = 0.6, tl.cex = 0.6, cl.cex = 0.8
-    )
-
-}
-
-plot_correlation_matrix(crimes[, c("Shootings", "TotArrests", crime_names)])
+plot_correlation_matrix(
+    df = crimes[, c("Shootings", "TotArrests", CRIME_NAMES)],
+    title = "NYC Crimes arrests correlation"
+)
 ```
+
+
 
 ### Boroughs
 
+Let's see the borough effect on the shootings.
+
 ```{r}
-# Plot a boxplot for each borough
-plot_boxplot <- function(df, x, y, title, colors=c()) {
-
-    p = ggplot(df, aes(x = get(x), y = get(y))) +
-        geom_boxplot(aes(fill = .data[[x]]), alpha = 0.7) +
-        labs(title = title, x = x, y = y) +
-        theme(legend.position = "none")
-
-    if(length(colors)>0) {
-        p <- p + scale_fill_manual(values = colors)
-    }
-
-    return(p)
-
-}
 
 plot_boxplot(
     crimes, "Borough", "Shootings", "Shootings by Borough",
     colors = unlist(PALETTE$boroughs)
 )
+```
 
+Clearly different crimilanilties
+
+```{r}
 crimes$Year <- as.factor(crimes$Year)
 plot_boxplot(
     crimes, "Year", "Shootings", "Shootings by Year",
     colors = colorRampPalette(c('darkgreen', 'lightgreen'))(16)
 )
-crimes$Year <- as.numeric(crimes$Year)
+crimes$Year <- as.numeric(crimes$Year) + 2005
+```
 
+There's a seasonal effect, also variability involved
+
+```{r}
 plot_boxplot(
     crimes, "MonthName", "Shootings", "Shootings by Year",
     colors = colorRampPalette(c('#c44e00', '#eebf82'))(12)
 )
+
+```
+
+There's a slight trend
+
+### Previous month
+
+```{r}
+# Specify the columns to shift
+shift_cols <- c("Shootings", "TotArrests", CRIME_NAMES)
+
+crimes_shifted <- crimes
+
+# Loop through each column and create a new shifted column
+for (col in shift_cols) {
+    crimes_shifted[[paste("Prev", col, sep="")]] <- c(NA, crimes_shifted[[col]][-length(crimes_shifted[[col]])])
+}
+
+# Remove the first date
+crimes_df <- crimes_shifted[
+    !(crimes_shifted$Year == 2006 & crimes_shifted$Month == 1), 
+]
+
+prev_cols <- sapply(shift_cols, function(col) paste("Prev", col, sep=""))
+
+correlation <- cor(crimes_df[, shift_cols], use = "pairwise.complete.obs")
+
+prev_cols2 <- c("Shootings", prev_cols[prev_cols != "PrevShootings"])
+correlation2 <- cor(crimes_df[, prev_cols2], use = "pairwise.complete.obs")
+head(crimes_df)
+
+time_corr <- data.frame(
+    Previous = correlation2[1, -1],
+    Current  = correlation [1, -1]
+)
+rownames(time_corr) <- rownames(correlation)[-1]
+time_corr$Direction <- ifelse(time_corr$Previous > time_corr$Current, "<-", "->")
+
+time_corr
+
 
 ```

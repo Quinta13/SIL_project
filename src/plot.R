@@ -7,6 +7,24 @@
 #' @version 1.0
 #'
 
+# --- BOXPLOT ---
+
+# Plot a boxplot for each borough
+plot_boxplot <- function(df, x, y, title, colors=c()) {
+
+    p = ggplot(df, aes(x = get(x), y = get(y))) +
+        geom_boxplot(aes(fill = .data[[x]]), alpha = 0.7) +
+        labs(title = title, x = x, y = y) +
+        theme(legend.position = "none")
+
+    if(length(colors)>0) {
+        p <- p + scale_fill_manual(values = colors)
+    }
+
+    return(p)
+
+}
+
 # --- SCATTERPLOTS ---
 
 #' Create a basic scatterplot
@@ -57,8 +75,8 @@ basic_scatterplot <- function(
     p <- ggplot(data=data, aes(x=x_, y=y_)) +
         geom_point(shape=16, color=color, size=size) +
         labs(
-            x=ifelse(xlab == element_blank(), x, xlab), 
-            y=ifelse(ylab == element_blank(), y, ylab),
+            x=ifelse(xlab == "", element_blank(), xlab), 
+            y=ifelse(ylab == "", element_blank(), ylab),
             title=title
         )
 
@@ -101,8 +119,8 @@ levels_scatterplot <- function(
     title      = "", 
     title_size = 16,
     legend_pos = "topright",
-    xlab       = NULL,
-    ylab       = NULL,
+    xlab       = "",
+    ylab       = "",
     jitter_    = FALSE, 
     ticks      = 10,
     shape      = 16,
@@ -130,9 +148,9 @@ levels_scatterplot <- function(
     ) +
         geom_point(shape = shape, size = size) +
         labs(
+            title = title,
             x = xlab,
-            y = ylab,
-            title = title
+            y = ylab
         ) +
         scale_color_discrete(labels = levels(df_[[levels]])) +
         theme(
@@ -150,14 +168,6 @@ levels_scatterplot <- function(
 
     if(!legend) {
         p <- p + theme(legend.position = "none")
-    }
-
-    if(is.null(xlab)) {
-        p <- p + theme(axis.title.x = element_blank())
-    }
-
-    if(is.null(ylab)) {
-        p <- p + theme(axis.title.y = element_blank())
     }
 
     return(p)
@@ -291,7 +301,8 @@ plot_multiple_ts <- function(
 plot_model_prediction <- function(
     df_, model, x, y, 
     title="",
-    ylab ="",
+    xlab = "",
+    ylab = "",
     jitter_=FALSE,
     col="steelblue",
     col_points="steelblue",
@@ -303,6 +314,7 @@ plot_model_prediction <- function(
     # Plot points
     p <- basic_scatterplot(
         data=df_, x=x, y=y, jitter_=jitter_,
+        xlab = xlab, ylab = ylab,
         color=col_points, size=points_size
     )
 
@@ -334,55 +346,83 @@ plot_model_prediction <- function(
 
 }
 
+
+
 plot_multiple_model_prediction <- function(
     df_, models, x, y, 
     title="",
+    xlab = "",
     ylab ="",
     jitter_=FALSE,
     colors=c(),
     points_size=1,
-    lwd_observations = 1,
     lwd = 1,
-    glmnet_predictors=c()
+    glmnet_predictors=c(),
+    level = 0.
 ) {
 
     # Plot points
     p <- basic_scatterplot(
         data=df_, x=x, y=y, jitter_=jitter_,
-        color='black', size=points_size
+        color='black', size=points_size,
+        title=title, xlab=xlab, ylab=ylab
     )
 
     if(length(colors) == 0) {
-    colors <- rainbow(length(models))
+        colors <- rainbow(length(models))
     }
 
-# Loop over models to add prediction lines
-for(i in 1:length(models)) {
-  
-  model_name <- names(models)[i]
-  model <- models[[model_name]]
-  
-  # Create dummy DF for predictions
-  dummy_df <- data.frame(tmp=seq(min(df_[[x]]), max(df_[[x]]), by=1))
-  
-  dummy_df[[x]] <- as.numeric(dummy_df$tmp)
-  dummy_df$tmp <- NULL
-  
-  dummy_df[[y]] <- predict(model, newdata=dummy_df, type="response")
-  dummy_df$label <- model_name  # Add label column for legend
-  
-  p <- p + geom_line(
-    data=dummy_df, 
-    aes_string(x=x, y=y, color="label"), 
-    linetype="dashed", 
-    linewidth=1
-  )
-}
+    # Create a color mapping for the models
+    model_colors <- setNames(colors, names(models))
 
-# Use scale_color_manual to specify the colors
-p <- p + scale_color_manual(values=colors, name="Model") +
-  theme(legend.title = element_text(size=10), legend.text = element_text(size=8))
+    # Loop over models to add prediction lines
+    for(i in 1:length(models)) {
 
+        model_name <- names(models)[i]
+        model <- models[[model_name]]
+
+        # Create dummy DF for predictions
+        dummy_df <- data.frame(tmp=seq(min(df_[[x]]), max(df_[[x]]), by=1))
+
+        dummy_df[[x]] <- as.numeric(dummy_df$tmp)
+        dummy_df$tmp <- NULL
+
+        pred_df <- generate_predictions_with_ci(
+            model=model, newdata=dummy_df, y=y, level=level
+        )
+        
+        p <- p + geom_line(
+            data=pred_df, 
+            aes_string(x=x, y=y, color=shQuote(model_name)), 
+            linetype="dashed", 
+            linewidth=1
+        )
+
+        
+        if (level > 0) {
+            p <- p + geom_ribbon(
+            data = pred_df,
+            aes_string(
+                x = x, 
+                ymin = "Lower", 
+                ymax = "Upper",
+                fill = shQuote(model_name),
+                color = NULL
+            ),
+            alpha = ALPHA_CH,
+            inherit.aes = FALSE
+            )
+        }
+        }
+
+    # Use scale_color_manual to specify the colors
+    p <- p + scale_color_manual(values=model_colors, name="Model")
+    p <- p + scale_fill_manual(values=model_colors, name="Model")
+    # Show only the geom_line legend
+    p <- p + guides(
+        color=guide_legend(title="Model"), 
+        fill=guide_legend(title="Model")
+    )
 
     return(p)
 
@@ -397,7 +437,7 @@ plot_model_prediction_over_time <- function(
     lwd=1,
     lwd_observations=1,
     ticks=10,
-    ci=FALSE,
+    level = 0.,
     yrange=c(),
     glmnet_predictors=c()
 ) {
@@ -419,31 +459,31 @@ plot_model_prediction_over_time <- function(
     )
 
     # Create dummy DF for predictions
-    stats <- get_prediction_stats(
-        model=model, df_=df_, y=y,
+    preds <- generate_predictions_with_ci(
+        model=model, 
+        newdata=df_, 
+        y=y, 
+        level=level,
         glmnet_predictors=glmnet_predictors
     )
 
-    predictions <- stats$Pred
-    error       <- stats$Std
-
     # Add the prediction line
     p <- p + geom_line(
-        aes_string(y=predictions),
+        aes_string(y=preds[[y]]),
         lwd=lwd,
         color=col,
         linetype="dashed"
     )
 
     # Optionally add the confidence interval ribbon
-    if (ci) {
+    if (level > 0) {
         p <- p + geom_ribbon(
             aes_string(
-                ymin=predictions - error, 
-                ymax=predictions + error, 
+                ymin=preds$Lower, 
+                ymax=preds$Upper, 
             ),
             fill=col,
-            alpha=0.22
+            alpha=ALPHA_CH
         )
     }
 
@@ -455,14 +495,25 @@ plot_model_prediction_over_time <- function(
 plot_model_prediction_per_level <- function(
     df_, model, x, y, levels, 
     title="",
-    ylab ="",
+    xlab="", ylab ="",
+    points_size = 1,
+    level = 0,
+    colors = c(),
     glmnet_predictors=c()
 ) {
 
+    levels_values <- levels(df_[[levels]])
+
+    if(length(colors) == 0) {
+        colors <- rainbow(length(levels_values))
+    }
+
     # Plot points
     p <- levels_scatterplot(
-        df_=df_, x=x, y=y, levels=levels, title=title
+        df_=df_, x=x, y=y, levels=levels, size=points_size,
+        xlab=xlab, ylab=ylab, title=title, colors=colors
     )
+
 
     # Create dummy DF for predictions
     dummy_df <- data.frame(
@@ -473,8 +524,7 @@ plot_model_prediction_per_level <- function(
     dummy_df[[y]] <- NULL
     dummy_df$tmp  <- NULL
 
-    levels_values <- levels(df_[[levels]])
-
+    
     for (i in 1:length(levels_values)) {
 
         # Extract the level value
@@ -482,17 +532,48 @@ plot_model_prediction_per_level <- function(
 
         # Compute predictions for that Borough
         dummy_df[[levels]] <- rep(value, nrow(dummy_df))
-        dummy_df[[y]]      <- predict(model, newdata=dummy_df, type="response")
-            
+        dummy_df <- generate_predictions_with_ci(
+            model=model, 
+            newdata=dummy_df, 
+            y=y, 
+            level=level,
+        )
+
         # Add lines to the plot
         p <- p + geom_line(
             data=dummy_df, 
             aes(x=.data[[x]], y=.data[[y]], color=.data[[levels]]), 
             linetype="dashed", 
-            size=1.
+            size=1.,
+            
         )
 
+        # Optionally add the confidence interval ribbon
+        if (level > 0) {
+            p <- p + geom_ribbon(
+                data=dummy_df,
+                aes(
+                    x=.data[[x]], 
+                    ymin=.data[["Lower"]], 
+                    ymax=.data[["Upper"]],
+                    fill=.data[[levels]]
+                ),
+                alpha=ALPHA_CH,
+                color=NA,
+                inherit.aes=FALSE
+            )
+        }
+
     }
+
+    # Use scale_color_manual to specify the colors
+    p <- p + scale_color_manual(values=colors, name=levels)
+    p <- p + scale_fill_manual(values=colors, name=levels)
+# 
+    # # Show only the geom_line legend
+    p <- p + guides(
+        fill="none"
+    )
 
     return(p)
 
@@ -500,10 +581,10 @@ plot_model_prediction_per_level <- function(
 
 
 plot_multiple_model_predictions_over_time <- function(
-    df_, models_stats, y,
+    df_, models, y,
     title="",
     ylab ="",
-    ci   =FALSE,
+    level   =0.,
     lwd  =1,
     lwd_observations=1,
     alpha = 0.25,
@@ -527,28 +608,35 @@ plot_multiple_model_predictions_over_time <- function(
         )
 
         # Loop through each model and add the lines and ribbons
-        for (model_name in names(models_stats)) {
-            
-            model_stats <- models_stats[[model_name]]
-            predictions <- model_stats$Pred
-            error       <- model_stats$Std
+        for (i in 1:length(models)) {
+
+            model_name <- names(models)[i]
+            model      <- models[[model_name]]
+
+            preds <- generate_predictions_with_ci(
+                model=model, 
+                newdata=df_, 
+                y=y, 
+                level=level
+            )
 
             # Add the prediction line
             p <- p + geom_line(
-                aes_string(y=predictions, col=shQuote(model_name)),
+                aes_string(y=preds[[y]], col=shQuote(model_name)),
                 lwd=lwd,
                 linetype="dashed"
             )
 
             # Optionally add the confidence interval ribbon
-            if (ci) {
+            if (level > 0) {
                 p <- p + geom_ribbon(
                     aes_string(
-                        ymin=predictions - error, 
-                        ymax=predictions + error, 
-                        fill=shQuote(model_name)
+                        ymin=preds$Lower, 
+                        ymax=preds$Upper, 
+                        fill=shQuote(model_name),
+                        color=NULL
                     ),
-                    alpha=alpha
+                    alpha=ALPHA_CH
                 )
             }
 
@@ -558,22 +646,22 @@ plot_multiple_model_predictions_over_time <- function(
             p <- p + scale_color_manual(values=colors)
         }
         
-        p <- p + guides(
-            color=guide_legend(title="Model name"), 
-            fill="none"
-        )
+        # Remove the fill from the legend
+        p <- p + guides(fill = "none")
+        
     
     } else {
 
         if(length(colors) == 0) {
-            colors <- rainbow(length(models_stats))
+            colors <- rainbow(length(models))
         }
 
         pp <- list()
 
-        for(i in 1:length(models_stats)) {
+        for(i in 1:length(models)) {
 
-            model_name <- names(models_stats)[i]
+            model_name <- names(models)[i]
+            model <- models[[model_name]]
 
             df_ts <- ts_crimes_reshape(df_)
 
@@ -588,12 +676,15 @@ plot_multiple_model_predictions_over_time <- function(
                 ticks=ticks
             )
 
-            stats = models_stats[[model_name]]
-            predictions <- stats$Pred
-            error <- stats$Std
+            preds <- generate_predictions_with_ci(
+                model=model, 
+                newdata=df_, 
+                y=y, 
+                level=level
+            )
 
             df_ts <- df_ts[df_ts$CrimeType == y,]
-            df_ts$Count <- predictions
+            df_ts$Count <- preds[[y]]
 
             p <- p + geom_line(
                 data=df_ts, 
@@ -603,14 +694,14 @@ plot_multiple_model_predictions_over_time <- function(
                 color=colors[i]
             )
             
-            if(ci) {
+            if(level > 0) {
                 p <- p + geom_ribbon(
                     aes_string(
-                        ymin=predictions - error, 
-                        ymax=predictions + error
+                        ymin=preds$Lower, 
+                        ymax=preds$Upper
                         #fill=colors[i]
                     ),
-                    alpha=alpha,
+                    alpha=ALPHA_CH,
                     fill = colors[i]
                 )
             }
@@ -620,7 +711,7 @@ plot_multiple_model_predictions_over_time <- function(
         }
 
         # Arrange the plots in a grid
-        grid.arrange(
+        p <- grid.arrange(
             grobs = pp,
             nrow = grid_rows,
             top = textGrob(
@@ -639,7 +730,7 @@ plot_model_predictions_per_level_over_time <- function(
     model, df_, y, levels, 
     title="", 
     ylab ="",
-    ci   =FALSE,
+    level = 0.,
     lwd  =1,
     lwd_observations=1,
     colors=c(),
@@ -677,12 +768,16 @@ plot_model_predictions_per_level_over_time <- function(
                 crime_type="Shootings"
             )
 
-            stats <- get_prediction_stats(
-                model=model, df_=df_level, y=y,
+            preds <- generate_predictions_with_ci(
+                model=model, 
+                newdata=df_level, 
+                y=y,
                 glmnet_predictors=glmnet_predictors
             )
 
-            df_ts_level$Count <- stats$Pred
+            df_ts_level$Count <- preds[[y]]
+            df_ts_level$Upper <- preds$Upper
+            df_ts_level$Lower <- preds$Lower
 
             p <- p + geom_line(
                 data=df_ts_level, 
@@ -690,13 +785,18 @@ plot_model_predictions_per_level_over_time <- function(
                 linetype="dashed", linewidth=lwd
             )
             
-            if(ci) {
+            if(level > 0) {
 
                 # add confidence interval geom_ribbon
                 p <- p + geom_ribbon(
                     data=df_ts_level,
-                    aes(x=YearMonth, ymin=Count - stats$Std, ymax=Count + stats$Std, fill=Borough),
-                    alpha=0.20,
+                    aes(
+                        x=YearMonth, 
+                        ymin=Lower, 
+                        ymax=Upper,
+                        fill=Borough
+                    ),
+                    alpha=ALPHA_CH,
                     colour=NA,
                     show.legend=FALSE
                 )
@@ -721,13 +821,17 @@ plot_model_predictions_per_level_over_time <- function(
 
         for(level_name in levels_names) {
             df_level=df_[df_[[levels]] == level_name, ]
-            stats <-  get_prediction_stats(
-                model=model, df_=df_level, y=y,
-                glmnet_predictors=glmnet_predictors
+
+            preds <- generate_predictions_with_ci(
+                model=model, 
+                newdata=df_level, 
+                y=y,
+                glmnet_predictors = glmnet_predictors
             )
-            preds  <- stats$Pred
-            errors <- stats$Std
-            ranges[[level_name]] <- range(preds) + c(-errors, +errors)
+
+            fitted <- preds[[y]]
+
+            ranges[[level_name]] <- c(fitted, preds$Lower, preds$Upper)
         }
 
         # Create an empty list to store the plots
@@ -747,20 +851,25 @@ plot_model_predictions_per_level_over_time <- function(
                 x=x,
                 y=y,
                 col=colors[i],
-                title=paste(title, level_name),
+                title=level_name,
                 col_observations=colors[i],
                 lwd=lwd,
                 lwd_observations=lwd_observations,
                 glmnet_predictors=glmnet_predictors,
                 yrange=yrange,
                 ticks=ticks,
-                ci=ci
+                level=level
             )
         
         }
 
         # Arrange the plots in a grid
-        p = do.call(grid.arrange, c(pp, nrow=grid_rows))
+        p <- grid.arrange(
+            grobs = pp,
+            top = textGrob(
+                title, 
+                gp = gpar(fontsize = 15, fontface = "bold"))
+        )
     
     }
 

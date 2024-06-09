@@ -83,6 +83,7 @@ prepare_crimes <- function(crimes_df, col_merge = TRUE) {
     crimes_df$MonthName <- as.factor(month.abb[crimes_df$Month])
     crimes_df$MonthName <-    factor(crimes_df$MonthName, levels = month.abb) # reorder levels by month
 
+    # Merge the two CrimeTypes related to Substance possession
     if(col_merge) {
         # Union of Marijuana and Other Drugs
         crimes_df$SubstancePossession <- 
@@ -91,8 +92,21 @@ prepare_crimes <- function(crimes_df, col_merge = TRUE) {
         crimes_df$MarijuanaSellPossession <- NULL
     }
 
-    # Add logarithmic transformation of TotArrests
-    crimes_df$SqrtTotArrests <- sqrt(crimes_df$TotArrests)
+    # Use arrests in previous month as predictors
+    first.year  <- crimes_df$Year[1]
+    first.month <- crimes_df$Month[1]
+
+    # Loop through each column and create a new shifted column
+    for (col in c(CRIME_NAMES, "TotArrests")) {
+        crimes_df[[col]] <- c(
+            NA, crimes_df[[col]][-length(crimes_df[[col]])]
+        )
+    }
+
+    # Remove the first date
+    crimes_df <- crimes_df[
+        !(crimes_df$Year == first.year & crimes_df$Month == first.month), 
+    ]
 
     return(crimes_df)
 
@@ -208,5 +222,16 @@ for (i in 1:nrow(outliers)) {
 }
 
 return(df_)
+
+}
+
+get_epoch <- function(year, month) {
+    (year - min(crimes$Year)) * 12 + month
+}
+
+knit_table <- function(table) {
+
+    knitr::kable(table, format = "html") %>%
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
 
 }

@@ -10,10 +10,25 @@
 
 # --- CONVERSION ---
 
+fractional_year_to_date <- function(fractional_year) {
+
+    # Separate the year and the fractional part
+    year <- floor(fractional_year)
+    fraction <- fractional_year - year
+    
+    # Convert the fractional part to days (approximate)
+    days_in_year <- 365
+    day_of_year <- round(fraction * days_in_year)
+    
+    # Construct the date
+    date <- ymd(paste0(year, "-01-01")) + days(day_of_year)
+    
+    return(date)
+    
+}
+
 
 df_to_month_ts <- function(df_, y) {
-    
-    # Define the time series object
     
     return (
         ts(
@@ -25,7 +40,8 @@ df_to_month_ts <- function(df_, y) {
     
 }
 
-reshape_postprocess <- function(df_, id.vars) {
+
+aux_reshape_postprocess <- function(df_, id.vars) {
 
     # Post process
     df_ <- data.frame(df_)
@@ -47,6 +63,7 @@ reshape_postprocess <- function(df_, id.vars) {
     return(df_ts)
 
 }
+
 
 ts_crimes_reshape <- function(df_) {
 
@@ -72,9 +89,15 @@ ts_crimes_reshape <- function(df_) {
         select(-MonthName, -Year) %>%
         pivot_wider(names_from = YearMonth, values_from = Count)  
     
-    return(reshape_postprocess(df_=df_wide, id.vars="CrimeType"))
+    return(
+        aux_reshape_postprocess(
+            df_=df_wide, 
+            id.vars="CrimeType"
+        )
+    )
     
 }
+
 
 ts_borough_reshape <- function(df_, crime_type) {
 
@@ -89,28 +112,12 @@ ts_borough_reshape <- function(df_, crime_type) {
         select(-MonthName, -Year) %>%
         pivot_wider(names_from = YearMonth, values_from = !!crime_type)
 
-    return(reshape_postprocess(df_=df_wide, id.vars="Borough"))
+    return(aux_reshape_postprocess(df_=df_wide, id.vars="Borough"))
 
 }
 
-fractional_year_to_date <- function(fractional_year) {
-        # Separate the year and the fractional part
-        year <- floor(fractional_year)
-        fraction <- fractional_year - year
-        
-        # Convert the fractional part to days (approximate)
-        days_in_year <- 365
-        day_of_year <- round(fraction * days_in_year)
-        
-        # Construct the date
-        date <- ymd(paste0(year, "-01-01")) + days(day_of_year)
-        
-        return(date)
-    }
-
 
 # --- TIME SERIES ANALYSIS ---
-
 
 plot_feature_ccf <- function(
     df_,
@@ -140,6 +147,7 @@ plot_feature_ccf <- function(
 
     }
 }
+
 
 plot_ccf_grid <- function(
     df,
@@ -202,39 +210,38 @@ plot_ts_stl_decomposition <- function(
 
 outliers_diagnostic <- function(df_, colors, y, title="", ylab="") {
 
-  # Plot the original time series
-  p <- plot_ts(
-    ts_crimes_reshape(
-        df_=df_[, c("Year", "MonthName", y)]
-    ),
-    group = "CrimeType",
-    y = y,
-    col = colors$ts,
-    ylab = "Shootings",
-    title = title,
-    lwd = 0.7,
-    ticks  =5
-  )
+    # Plot the original time series
+    p <- plot_ts(
+        ts_crimes_reshape(
+            df_=df_[, c("Year", "MonthName", y)]
+        ),
+        group  = "CrimeType",
+        y      = y,
+        col    = colors$ts,
+        ylab   = "Shootings",
+        title  = title,
+        lwd    = 0.7,
+        ticks  = 5
+    )
 
-  ts <- df_to_month_ts(df_, y=y)
-  
-  # Extract outliers index and times 
-  outliers <- tsoutliers(ts)
-  idx      <- outliers$index
-  times    <- time(ts)[idx]
-  
-  # Extract old and new observations
-  old  <- ts[idx]
-  new_ <- as.integer(outliers$replacements)
-  
+    ts <- df_to_month_ts(df_, y=y)
 
-  df_outliers <- data.frame(
-    Time = as.Date(rep(unlist((
-        lapply(times, fractional_year_to_date)
-    )), 2)),
-    Value = c(old, new_),
-    Label = c(rep("Old", length(old)), rep("New", length(new_)))
-  )
+    # Extract outliers index and times 
+    outliers <- tsoutliers(ts)
+    idx      <- outliers$index
+    times    <- time(ts)[idx]
+
+    # Extract old and new observations
+    old  <- ts[idx]
+    new_ <- as.integer(outliers$replacements)
+
+    df_outliers <- data.frame(
+        Time = as.Date(rep(unlist((
+            lapply(times, fractional_year_to_date)
+        )), 2)),
+        Value = c(old, new_),
+        Label = c(rep("Old", length(old)), rep("New", length(new_)))
+    )
 
     
     p <- p + geom_point(
@@ -242,7 +249,7 @@ outliers_diagnostic <- function(df_, colors, y, title="", ylab="") {
         aes(x = Time, y = Value, color = Label),
         size = 2
     ) +
-        scale_color_manual(values=c(colors$old, colors$new))
+        scale_color_manual(values=c(colors$new, colors$old))
 
     df_outliers <- reshape(
         df_outliers,

@@ -10,13 +10,14 @@
 # --- PACKAGES ---
 
 REQUIREMENTS <- c(
-    "ggplot2",  "reshape2",    "scales", 
-    "car",      "leaps",       "effects", 
-    "grid",     "gridExtra",   "RColorBrewer", 
-    "tidyr",    "dplyr",       "kableExtra",
-    "glmnet",   "glmnetUtils", "chron",
-    "corrplot", "tsoutliers",  "forecast",
-    "lubridate"
+    "car",         "chron",        "corrplot", 
+    "dplyr",       "effects",      "factoextra", 
+    "forecast",    "ggplot2",      "glmnet", 
+    "glmnetUtils", "grid",         "gridExtra", 
+    "kableExtra",  "leaps",        "lubridate", 
+    "Matrix",      "performance",  "RColorBrewer",
+    "reshape2",    "scales",       "tidyr",      
+    "tsoutliers"
 )
 
 
@@ -37,10 +38,33 @@ LANG    <- "en_US.UTF-8"  # Language
 
 # --- DATA ---
 
+LEVEL <- 0.95  # Confidence level for the prediction intervals
+
+ALPHA <- 1.    # Elastic net mixing parameter default
+
 YEAR_TEST <- c(2022, 2023)  # Year to use as test set
+
+CRIME_NAMES <- c(
+    "Assaults",
+    "Bribery",
+    "Burglary",
+    "DrugParaphernalia",
+    "Firearm",
+    "Forgery",
+    "Larceny",
+    "Mischief",
+    "Murder",
+    "Robbery",
+    "SubstancePossession",
+    "Theft",
+    "Trepass",
+    "WeaponsPossession"
+)
 
 
 # --- COLORS ---
+
+ALPHA_CH <- 0.25  # Alpha channel for the colors
 
 PALETTE <- list(
 
@@ -52,12 +76,20 @@ PALETTE <- list(
         StatenIsland = "#ff7f00dd"
     ),
 
-    pca_histo = c(
-        "#0076b6ee", "#0096c7ee", "#00b4d8ee", 
-        "#48cae4ee", "#90e0efee", "#ade8f4ee"
+    pca = list(
+        line  = "#03016b",
+        histo = c(
+            "#0076b6", "#0096c7", "#00b4d8", 
+            "#48cae4", "#90e0ef", "#ade8f4"
+        ),
+        gradient = c(
+            "#00AFBB", "#E7B800", "#FC4E07"
+        ),
+        biplot = list(
+            ind = "#696969",
+            var = "#2E9FDF"
+        )
     ),
-
-    pca_biplot = c("#0e426c", "#ff3c00d6"),
 
     crimes = c(
         "#ff5722ee", "#ff9800ee", "#ffc107ee", "#ffeb3bee", 
@@ -69,9 +101,8 @@ PALETTE <- list(
 
     outliers = list(
         ts  = "#000000",
-        old = "#af1818ee",
-        new = "#53e953ee"
+        new = "#af1818ee",
+        old = "#53e953ee"
     )
 
 )
-

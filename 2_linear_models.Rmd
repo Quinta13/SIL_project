@@ -14,7 +14,7 @@ output:
 ```{r echo=FALSE, include=FALSE}
 
 # 1. RMardown styling
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo=FALSE)
 knitr::opts_chunk$set(fig.width = 12, fig.height = 8)
 
 # 2. Project environment setup
@@ -27,14 +27,8 @@ source("src/init.R")
 # Load data
 crimes <- read.csv(PATHS$NycMonthCrimes)
 
-```
-```{r}
-
 # Add discrete version for Month and Year
 crimes <- prepare_crimes(crimes_df=crimes)
-
-crime_names <- colnames(crimes)[4:17]
-
 
 # Split Train and Test
 split <- train_test_split_by_year(df_ = crimes, year_test = YEAR_TEST)
@@ -42,21 +36,34 @@ crimes <- split$train
 crimes_test <- split$test
 rm(split)
 
-summary(crimes)
-```
-
-```{r}
-# Take apart Queens from the borough and recompute the total
-
 split_out <- split_statenisland(crimes=crimes, crimes_test=crimes_test)
 
 crimes         <- split_out$crimes
 crimes_test    <- split_out$crimes_test
 si_crimes      <- split_out$si_crimes
 si_crimes_test <- split_out$si_crimes_test
+
+for(borough in levels(crimes$Borough)) {
+
+    outliers_out <- outliers_diagnostic(
+        df_ = crimes[crimes$Borough == borough,],
+        y = "Shootings",
+        title = borough,
+        ylab = "Shootings incidents",
+        colors = PALETTE$outliers
+    )    
+
+    crimes <- replace_outliers(
+        df_=crimes,
+        y = "Shootings",
+        outliers = outliers_out$outliers,
+        level=borough
+    )
+
+}
 ```
 
-## State Staten
+## Staten Island
 
 ```{r}
 
@@ -83,26 +90,41 @@ grid.arrange(
     ),
     ncol = 3
 )
+```
 
-df_group_stats(si_crimes, "Year", "Shootings")
+### Overview
 
-df_group_stats(si_crimes, "Month", "Shootings")
+Average per year
 
-#knitr::kable(stats_table, format = "html") %>%
-#    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```{r}
+knit_table(df_group_stats(si_crimes, "Year", "Shootings"))
+```
 
-# Time relations
+Month 
+```{r}
+knit_table(df_group_stats(si_crimes, "MonthName", "Shootings"))
+```
 
+
+### Time series Decomposition
+
+Ts with average
+```{r}
 plot_ts(
     df_ts = ts_crimes_reshape(si_crimes),
     group = "CrimeType",
     y     = "Shootings",
     ylab  = "Shootings",
     title = "Shootings in StatenIsland",
-    lwd   = 0.7
+    lwd   = 0.7,
+    col   = "#030a35"
 ) +
-    geom_hline(yintercept = mean(si_crimes$Shootings), linetype = "dashed", color = "#124ecfdf", linewidth = 0.5)
+    geom_hline(yintercept = mean(si_crimes$Shootings), linetype = "dashed", color = "#e24000df", linewidth = 1.5)
+```
 
+Decomposition
+
+```{r}
 plot_ts_stl_decomposition(
     df_ = si_crimes,
     y = "Shootings",
@@ -110,134 +132,106 @@ plot_ts_stl_decomposition(
 )
 ```
 
+### Linar models
+
 ```{r}
 # Linear models
-si_crimes_models <- list()
+si_models <- list()
+```
+
+#### Null model
+
+```{r}
 
 # Null model predicting the mean level
-si_crimes_models$null <- lm(Shootings ~ 1, data = si_crimes)
+si_models$null <- lm(Shootings ~ 1, data = si_crimes)
+
 lm_diagnostic(
-    si_crimes_models$null, 
+    si_models$null, 
     residuals = FALSE, 
     effects   = FALSE,
     vif       = FALSE
 )
 
-si_crimes[c(10, 43), c("Year", "Month", "Shootings")]
+si_crimes[c(9, 42), c("Year", "Month", "Shootings")]
+```
 
+High number
+
+#### Month model
+
+```{r}
 # Using month levels with constraints they sum up to 0
 contrasts(si_crimes     $MonthName) <- contr.sum(12)
 contrasts(si_crimes_test$MonthName) <- contr.sum(12)
 
-si_crimes_models$month <- lm(
+si_models$month <- lm(
     Shootings ~ MonthName, 
     data = si_crimes
 )
 
 lm_diagnostic(
-    si_crimes_models$month, 
+    si_models$month, 
     influencial_points = FALSE,
     effects = FALSE,
     vif = FALSE
 )
+```
 
+We plot coefficients for the month with respect to the average number of shootings r`mean(si_crimes$Shootings)`.
+
+```{r}
 plot_model_coefficients(
-    coefs  = si_crimes_models$month$coefficients[2:12],
+    coefs  = si_models$month$coefficients[2:12],
     xlab   = "Month",
     title  = "StatenIsland Month Coefficients",
     labels = month.abb
 )
 
-# Using arrests and murders
-si_crimes_models$totarrests <- lm(
-    Shootings ~ TotArrests,
-    data = si_crimes
-)
+```
 
-lm_diagnostic(
-    si_crimes_models$totarrests, 
-    effects = FALSE, 
-    influencial_points = FALSE,
-    vif = FALSE
-)
-
-si_crimes_models$totarrests2 <- lm(
-    Shootings ~ TotArrests + I(TotArrests^2),
-    data = si_crimes
-)
-
-lm_diagnostic(
-    si_crimes_models$totarrests2,
-    influencial_points = FALSE,
-    vif = FALSE,
-    effects = FALSE
-)
+Only significant are the rwo month more distant to the mean, Feb in negative and july in postiive, the seasonal effect has impact on just one number of shootings as shown in the stl decomposition.
 
 
-si_crimes_models$totarrests3 <- lm(
-    Shootings ~ TotArrests + I(TotArrests^2) + I(TotArrests^3),
-    data = si_crimes
-)
-lm_diagnostic(
-    si_crimes_models$totarrests3,
-    influencial_points = FALSE,
-    vif = FALSE,
-    effects = FALSE
-)
+#### Crimes models
+```{r}
 
-plot_multiple_model_prediction(
-    df_=si_crimes,
-    models=list(
-                linear = si_crimes_models$totarrests,
-                square = si_crimes_models$totarrests2,
-                cubic  = si_crimes_models$totarrests3
-            ),
-    x="TotArrests", y="Shootings", 
-    title="AAAAAAAA",
-    ylab ="BBBBBBb",
-    jitter_=TRUE
-)
-
-
-models=list(
-    linear = si_crimes_models$totarrests,
-    square = si_crimes_models$totarrests2,
-    cubic  = si_crimes_models$totarrests3
-)
-
-generate_prediction_table(
-    models = list(
-        linear = si_crimes_models$totarrests,
-        square = si_crimes_models$totarrests2,
-        cubic  = si_crimes_models$totarrests3
-    ),
-    predictor_name = "TotArrests",
-    predictor_values = seq(1000, 10000, 1000)
-)
-
-
-si_crimes_models$crimes <- lm(
+si_models$crimes <- lm(
     Shootings ~ Murder + Robbery,
-    data = si_crimes,
+    data = si_crimes
 )
 
 lm_diagnostic(
-    si_crimes_models$crimes,
+    si_models$crimes,
     influencial_points = FALSE,
     effects = FALSE
 )
+```
 
+All significative. Similar adjusted R^2
+Vif no multicollineratiy
+
+#### Step wise regression
+
+```{r}
 # Select the best model using step subset selection leaps library
 subset_regression_info(
     subset_reg = regsubsets(
-        Shootings ~ . - TotArrests - Month - SqrtTotArrests,
+        Shootings ~ . - TotArrests - Month,
         data = si_crimes,
         nvmax = 21
     )
 )
+```
+
+We seelect the number of variables selected by BIC.
+
+Use two crimes plus the two months that have higher lowest value.
+
+```{r}
 
 # Select the regsubsets model with 4 predictors
-si_crimes_models$auto <- lm(
+si_models$stepwise <- lm(
     Shootings ~ Mischief + Murder +
         as.numeric(MonthName == "Feb") +
         as.numeric(MonthName == "Jul"),
@@ -245,115 +239,91 @@ si_crimes_models$auto <- lm(
 )
 
 lm_diagnostic(
-    si_crimes_models$auto,
+    si_models$stepwise,
     effects = FALSE,
     influencial_points = FALSE
 )
 
 ```
 
+Still 
+
+### Model comparison
+
+#### Prediciton plots
+
+Train
+
 ```{r}
-
-for (df_ in list(si_crimes, si_crimes_test)) {
-
-    models_stats <- get_models_prediction_stats(
-        models = si_crimes_models,
-        df_ = df_,
-        y = "Shootings"
-    )
-
-    print(
-        stats_to_table(models_stats)
-    )
-
-    plot_multiple_model_predictions_over_time(
-        df_ = df_,
-        models_stats = models_stats,
-        y = "Shootings",
-        title = "Shootings in Queens - Test set predictions",
-        ylab = "Shootings count",
-        ci = TRUE,
-        lwd = 1,
-        ticks = 3,
-        lwd_observations = 0.5,
-        grid_rows=4
-    )
-
-}
+invisible(plot_multiple_model_predictions_over_time(
+    df_ = si_crimes,
+    models = si_models,
+    y = "Shootings",
+    title = "Shootings in Queens - Training set predictions",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 1,
+    ticks = 3,
+    lwd_observations = 0.5,
+    grid_rows=2
+))
 ```
 
+Don't cover picks, probably errors difficult to model
 
 ```{r}
-# Create multiple time series for each different borough in crimes
 
+invisible(plot_multiple_model_predictions_over_time(
+    df_ = si_crimes_test,
+    models = si_models,
+    y = "Shootings",
+    title = "Shootings in Queens - Test set predictions",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 1,
+    ticks = 3,
+    lwd_observations = 0.5,
+    grid_rows=2
+))
+```
+
+#### Prediction metrics
+
+```{r}
+knit_table(
+    stats_to_table(
+        get_models_prediction_stats(
+            models = si_models,
+            df_ = si_crimes_test,
+            y = "Shootings"
+        )
+    )
+)
+```
+
+## NYC Boroughs
+
+### Time series overview
+
+Inspect times series
+
+```{r}
 plot_multiple_ts(
     df_ts = ts_borough_reshape(
         df_ = crimes[, c("Borough", "Year", "MonthName", "Shootings")],
         crime_type = "Shootings"
     ),
-    group = "Borough",
-    xlab = "Year",
-    ylab = "Incidents",
-    title = paste("Shootings in NYC"),
-    lwd = 0.7,
-    colors = unlist(PALETTE$boroughs)
-)
-
-palette_outlier <- PALETTE$outliers
-
-plots <- list()
-
-for(borough in levels(crimes$Borough)) {
-
-    palette_outlier$ts <- PALETTE$boroughs[[borough]]
-
-    outliers_out <- outliers_diagnostic(
-        df_ = crimes[crimes$Borough == borough,],
-        y = "Shootings",
-        colors = palette_outlier,
-        title = borough,
-        ylab = "Shootings incidents"
-    )
-
-    plots[[borough]] <- outliers_out$plot
-    
-
-    crimes <- replace_outliers(
-        df_=crimes,
-        y = "Shootings",
-        outliers = outliers_out$outliers,
-        level=borough
-    )
-
-}
-
-grid.arrange(grobs=plots, ncol=2)
-
-plot_multiple_ts(
-    df_ts = ts_borough_reshape(
-        df_ = crimes[, c("Borough", "Year", "MonthName", "Shootings")],
-        crime_type = "Shootings"
-    ),
-    group = "Borough",
-    xlab = "Year",
-    ylab = "Incidents",
-    title = paste("Shootings in NYC"),
-    lwd = 0.7,
-    colors = unlist(PALETTE$boroughs)
-)
-
-
-```
-
-
-```{r}
-
-plot_ccf_grid(
-    df    = crimes,
-    y     = "Shootings",
-    level = "Borough"
+    ylab   = "Incidents",
+    group  = "Borough",
+    title  = "Shootings in NYC Boroughs - 2006 to 2021",
+    lwd    = 0.6,
+    colors = unlist(PALETTE$boroughs),
+    ticks  = 3,
+    title_size = 16
 )
 ```
+
+Look at their decomposition
 
 ```{r}
 for (borough in unique(crimes$Borough)) {
@@ -363,8 +333,19 @@ for (borough in unique(crimes$Borough)) {
         df_ = df_, y = "Shootings", title = paste(borough, "- STL Decomposition")
     )
 }
+
 ```
 
+### Linear models
+
+Introduction
+```{r}
+models <- list()
+```
+
+#### Month seasonality
+
+Scatterplot monthly.
 ```{r}
 levels_scatterplot(
     df_ = crimes,
@@ -373,11 +354,12 @@ levels_scatterplot(
     levels = "Borough",
     title = "Shootings during year across Boroughs",
     jitter_ = TRUE,
-    colors = unlist(PALETTE$boroughs)
+    colors = unlist(PALETTE$boroughs),
+    size = 2
 )
-
-models <- list()
 ```
+
+Clear seasonal effect with a rise in the summer period a smaller rise in january-december.
 
 ```{r}
 
@@ -398,33 +380,36 @@ lm_diagnostic(
     influencial_points = FALSE
 )
 
+invisible(
 plot_model_predictions_per_level_over_time(
     model = models$month_steps,
     df_ = crimes,
     y = "Shootings",
     levels = "Borough",
-    title = "Shootings in Borough - Training set",
+    title = "Shootings per Borough - Month seasonal model - Training set",
     ylab = "Shootings incidents",
-    ci = TRUE,
-    lwd = 0.5,
-    lwd_observations = 0.5,
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
     colors = unlist(PALETTE$boroughs),
     grid_rows = 2
-)
+))
 
+invisible(
 plot_model_predictions_per_level_over_time(
     model = models$month_steps,
-    df_ = crimes_test,
+    df_ = crimes,
     y = "Shootings",
     levels = "Borough",
-    title = "Shootings in Borough - Training set",
+    title = "Shootings per Borough - Month seasonal model - Training set",
     ylab = "Shootings incidents",
-    ci = TRUE,
-    lwd = 0.5,
-    lwd_observations = 0.5,
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
+    ticks = 5,
     colors = unlist(PALETTE$boroughs),
     grid_rows = 2
-)
+))
 ```
 
 
@@ -433,11 +418,8 @@ plot_model_predictions_per_level_over_time(
 
 ```{r}
 # Add time indicator
-get_epoch <- function(year, month) {
-    (year - min(crimes$Year)) * 12 + month
-}
 
-crimes$t <- get_epoch(year = crimes$Year, month = crimes$Month)
+crimes$t      <- get_epoch(year = crimes$Year, month = crimes$Month)
 crimes_test$t <- get_epoch(year = crimes_test$Year, month = crimes_test$Month)
 
 models$periodic <- lm(
@@ -452,223 +434,243 @@ lm_diagnostic(
     influencial_points = FALSE
 )
 
+
+
+invisible(
 plot_model_predictions_per_level_over_time(
     model = models$periodic,
     df_ = crimes,
     y = "Shootings",
     levels = "Borough",
-    title = "Shootings in Borough - Training set",
+    title = "Shootings per Borough - Periodic model - Training set",
     ylab = "Shootings incidents",
-    ci = TRUE,
-    lwd = 0.5,
-    lwd_observations = 0.5,
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
     colors = unlist(PALETTE$boroughs),
     grid_rows = 2
-)
+))
 
+invisible(
 plot_model_predictions_per_level_over_time(
     model = models$periodic,
     df_ = crimes_test,
     y = "Shootings",
     levels = "Borough",
-    title = "Shootings in Borough - Training set",
+    title = "Shootings per Borough - Periodic model - Test set",
     ylab = "Shootings incidents",
-    ci = TRUE,
-    lwd = 0.5,
-    lwd_observations = 0.5,
+    ticks = 5,
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
     colors = unlist(PALETTE$boroughs),
     grid_rows = 2
-)
+))
+
 
 
 ```
 
 ```{r}
-models$totarrests2 <- lm(
+
+totarrests <- lm(
+    Shootings ~ TotArrests,
+    data = crimes
+)
+
+totarrests2 <- lm(
     Shootings ~ TotArrests +I(TotArrests^2),
     data = crimes
 )
 
-models$totarrests3 <- lm(
-    Shootings ~ TotArrests +I(TotArrests^2) + I(TotArrests^3),
-    data = crimes
-)
 
 lm_diagnostic(
-    models$totarrests2,
+    totarrests,
     effects=FALSE, vif=FALSE, influencial_points=FALSE
 )
 
 lm_diagnostic(
-    models$totarrests3,
+    totarrests2,
     effects=FALSE, vif=FALSE, influencial_points=FALSE
 )
 
 plot_multiple_model_prediction(
     df_=crimes,
-    x = "TotArrests",
-    y = "Shootings",
     models = list(
-        Quadratic = models$totarrests2,
-        Cubic     = models$totarrests3
+        Linear = totarrests,
+        Square = totarrests2
     ),
-    jitter_=TRUE
+    x="TotArrests", y="Shootings", 
+    title="Arrests Impact on Shootings - Training set",
+    xlab="Total Arrests", ylab ="Shootings Incidents",
+    jitter_=TRUE,
+    level = LEVEL,
+    colors = c("#c23512e7", "#0050ace7")
 )
 
-plot_multiple_model_prediction(
-    df_=crimes_test,
-    x = "TotArrests",
-    y = "Shootings",
-    models = list(
-        Quadratic = models$totarrests2,
-        Cubic     = models$totarrests3
-    ),
-    jitter_=TRUE
-)
-
+rm(list=c("totarrests", "totarrests2"))
 ```
 
 ```{r}
-models$totarrests_borough <- lm(
+
+models$tot_arrests <- lm(
     Shootings ~ TotArrests + I(TotArrests^2) + Borough,
     data = crimes
 )
 
 lm_diagnostic(
-     models$totarrests_borough,
-     effects=FALSE, vif=FALSE, influencial_points=FALSE
+    models$tot_arrests,
+    effects=FALSE, vif=FALSE, influencial_points=FALSE
 )
 
 plot_model_prediction_per_level(
-    model  = models$totarrests_borough,
+    model  = models$tot_arrests,
     df_    = crimes,
     x      = "TotArrests",
     y      = "Shootings",
     levels = "Borough",
-    title  = "Shootings in Borough - Training set",
+    title  = "Arrests impact on Shooting across Boroughs",
+    xlab   = "Total Arrests",
     ylab   = "Shootings incidents",
+    level  = LEVEL,
+    colors = unlist(PALETTE$boroughs)
 )
 
-plot_model_prediction_per_level(
-    model  = models$totarrests_borough,
-    df_    = crimes_test,
-    x      = "TotArrests",
-    y      = "Shootings",
-    levels = "Borough",
-    title  = "Shootings in Borough - Test set",
-    ylab   = "Shootings incidents"
-)
-
+invisible(
 plot_model_predictions_per_level_over_time(
-    model = models$totarrests_borough,
+    model = models$tot_arrests,
     df_ = crimes,
     y = "Shootings",
     levels = "Borough",
-    title = "Shootings in Borough - Training set",
+    title = "Shootings per Borough - Total Arrests model - Training set",
     ylab = "Shootings incidents",
-    ci = TRUE,
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
+    colors = unlist(PALETTE$boroughs),
     grid_rows = 2
-)
+))
 
+invisible(
 plot_model_predictions_per_level_over_time(
-    model = models$totarrests_borough,
+    model = models$tot_arrests,
     df_ = crimes_test,
     y = "Shootings",
     levels = "Borough",
-    title = "Shootings in Borough - Training set",
+    title = "Shootings per Borough - Total Arrests model - Test set",
     ylab = "Shootings incidents",
-    ci = TRUE,
+    ticks = 5,
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
+    colors = unlist(PALETTE$boroughs),
     grid_rows = 2
+))
+```
+
+```{r}
+
+models$crimes <- lm(
+    Shootings ~ Murder + Assaults + SubstancePossession,
+    data = crimes
 )
-```
 
-```{r}
-# Shrinkage selection
-predictors <- c(crime_names, "Year", "MonthName")
+lm_diagnostic(
+    models$crimes,
+    effects=TRUE, influencial_points=FALSE
+)
 
-# Create an empty data frame to store the results
-# summary_df <- data.frame(Borough = levels(crimes$Borough), stringsAsFactors = FALSE)
-# 
-# shrinkage_on_borough <- function(df_, y, type, title) {
-#     
-#     sub <- crimes[
-#         crimes$Borough == borough,
-#         c(predictors, "Shootings")
-#     ]
-# 
-#     # Create a list to store the results for each type
-#     results <- list()
-# 
-#     for (type in c("min", "1se")) {
-#         model_out <- shrinkage_selection(
-#             df_ = sub,
-#             y = "Shootings",
-#             type = type,
-#             title = paste("Lasso selection for", borough, "borough")
-#         )
-# 
-#         print(paste("BOROUGH", borough, "TYPE", type))
-#         print(coef(model_out))
-# 
-#         # Store the number of predictors in the results list
-#         results[[type]] <- sum(coef(model_out) != 0)
-#     }
-# 
-#     # Add the results to the summary data frame
-#     summary_df[summary_df$Borough == borough, c("min", "1se")] <- unlist(results)
-# 
-# }
-```
-
-
-```{r}
-for (type in c("min", "1se")) {
-    model_name <- paste("lasso_", type, sep = "")
-
-    model_out <- shrinkage_selection(
-        df_ = crimes[, c(predictors, "Borough", "Shootings")],
-        y = "Shootings",
-        type = type,
-        title = paste("Lasso selection for NYC -", type)
-    )
-
-    print(type)
-
-    print(coef(model_out))
-    print(paste("Predicotrs", sum(coef(model_out) != 0)))
-
-    models[[model_name]] <- model_out
-}
-
-```
-
-```{r}
-
+invisible(
 plot_model_predictions_per_level_over_time(
-    model = models$lasso_min,
+    model = models$crimes,
     df_ = crimes,
     y = "Shootings",
     levels = "Borough",
-    title = "Shootings in Borough - Training set",
+    title = "Shootings per Borough - Crimes model - Training set",
     ylab = "Shootings incidents",
-    ci = TRUE,
-    glmnet_predictors = c(predictors, "Borough"),
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
     colors = unlist(PALETTE$boroughs),
-    grid_rows=2
-)
+    grid_rows = 2
+))
 
+invisible(
 plot_model_predictions_per_level_over_time(
-    model = models$lasso_min,
+    model = models$crimes,
     df_ = crimes_test,
     y = "Shootings",
     levels = "Borough",
-    title = "Shootings in Borough - Training set",
+    title = "Shootings per Borough - Crimes model - Test set",
     ylab = "Shootings incidents",
-    ci = TRUE,
-    glmnet_predictors = c(predictors, "Borough"),
+    ticks = 5,
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
     colors = unlist(PALETTE$boroughs),
-    grid_rows=2
+    grid_rows = 2
+))
+
+```
+
+```{r}
+
+
+shrinkage_grid_search(
+    df_ = crimes[, c(CRIME_NAMES, "Borough", "Shootings")], 
+    y="Shootings", 
+    alphas=c(0, 1)
 )
+
+```
+
+```{r}
+
+models$shrinkage <- shrinkage_selection(
+    df_ = crimes[, c(CRIME_NAMES, "Borough", "Shootings")],
+    y = "Shootings",
+    type = "1se",
+    alpha = 1
+)
+
+```
+
+```{r}
+
+invisible(
+plot_model_predictions_per_level_over_time(
+    model = models$shrinkage,
+    df_ = crimes,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Shrinkage model - Training set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
+    glmnet_predictors = c(CRIME_NAMES, "Borough"),
+    colors = unlist(PALETTE$boroughs),
+    grid_rows = 2
+))
+
+invisible(
+plot_model_predictions_per_level_over_time(
+    model = models$shrinkage,
+    df_ = crimes_test,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Shrinkage model - Test set",
+    ylab = "Shootings incidents",
+    ticks = 5,
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
+    colors = unlist(PALETTE$boroughs),
+    glmnet_predictors = c(CRIME_NAMES, "Borough"),
+    grid_rows = 2
+))
+
+
 
 ```
 
@@ -678,11 +680,10 @@ models_stats <- get_models_prediction_stats(
     models = models,
     df_ = crimes,
     y = "Shootings",
-    glmnet_predictors = c(predictors, "Borough")
+    glmnet_predictors = c(CRIME_NAMES, "Borough")
 )
 out_table <- stats_to_table(models_stats)
 out_table
-
 
 kable(out_table, format = "html") %>%
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
