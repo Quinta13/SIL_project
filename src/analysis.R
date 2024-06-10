@@ -14,11 +14,12 @@ vif_diagnostic <- function(model) {
     )
 
     # Iterate over each predictor and store its VIF value and indicator in the data frame
-    for (i in seq_along(vif_values)) {
+    for (i in 1:length(vif_values)) {
         predictor <- names(vif_values)[i]
         vif_value <- vif_values[i]
         
         # Determine the indicator based on VIF value
+        # https://stats.stackexchange.com/questions/559924/which-threshold-should-i-use-for-gvif1-2⋅df-variance-inflation-factor
         indicator <- ifelse(
             vif_value > (10.0), "***", ifelse(
             vif_value > ( 5.0), "**" , ifelse(
@@ -32,6 +33,8 @@ vif_diagnostic <- function(model) {
             stringsAsFactors = FALSE)
         )
     }
+
+    rownames(vif_df) <- names(vif_values)
 
     # Return the data frame
     return(vif_df)
@@ -107,12 +110,21 @@ glm_plot_predictor_residuals <- function(
     # Remove from terms used all the ones starting with "I("
     terms_used <- terms_used[!grepl("^I\\(", terms_used)]
 
+    # Remove poly and only keep year
+    terms_used <- sub("poly\\(([^,]+),.*", "\\1", terms_used)
+
+    # Remove all interaction terms - aka they have : in the Pred name
+    terms_used <- terms_used[!grepl(":", terms_used)]
+
+
     if(ncol == 0) {
         ncol <- ceiling(sqrt(length(terms_used)))
     }
 
+
     # Create a list to store the plots
     plot_list <- list()
+
 
     # Generate a plot for each predictor
     for (pred in terms_used) {
@@ -387,7 +399,7 @@ shrinkage_grid_search <- function(df_, y, alphas)  {
 
     for(alpha in alphas) {
         for(type in c("min", "1se")) {
-            name <- paste0("(", type, ", alpha= ", alpha, ")")
+            name <- paste0("(", type, ", alpha=", alpha, ")")
             coefs[[name]] <- coef(
                 shrinkage_selection(
                     df_ = df_,
@@ -578,6 +590,8 @@ generate_predictions_with_ci <- function(
         }
 
     } else if("glmnet" %in% class(model)) {
+
+        # https://stats.stackexchange.com/questions/478115/how-do-i-calculate-confidence-intervals-on-an-elastic-net-regression-in-r
 
         df_dummy <- model.matrix(~., data = newdata[, glmnet_predictors])[, -1]
         predictions <- predict(

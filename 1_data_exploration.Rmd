@@ -82,7 +82,7 @@ We start by plotting the time series of the crimes and shootings over the years.
 
 plot_multiple_ts(
     df_ts = ts_crimes_reshape(
-        aggregate(
+        df_ = aggregate(
             . ~ Year + MonthName,
             data = crimes[, c("Year", "MonthName", CRIME_NAMES, "Shootings")], # Remove Borough, Month, TotArrests
             FUN = sum
@@ -766,14 +766,14 @@ prev_cols2 <- c("Shootings", prev_cols[prev_cols != "PrevShootings"])
 correlation2 <- cor(crimes_df[, prev_cols2], use = "pairwise.complete.obs")
 head(crimes_df)
 
-time_corr <- data.frame(
-    Previous = correlation2[1, -1],
-    Current  = correlation [1, -1]
-)
-rownames(time_corr) <- rownames(correlation)[-1]
-time_corr$Direction <- ifelse(time_corr$Previous > time_corr$Current, "<-", "->")
-
-time_corr
+# time_corr <- data.frame(
+#     Previous = correlation2[1, -1],
+#     Current  = correlation [1, -1]
+# )
+# rownames(time_corr) <- rownames(correlation)[-1]
+# time_corr$Direction <- ifelse(time_corr$Previous > time_corr$Current, "<-", "->")
+# 
+# time_corr
 
 
 ```

@@ -22,15 +22,13 @@ source("src/init.R")
 
 ```
 
+
+
 ```{r}
 
 # Load data
 crimes <- read.csv(PATHS$NycMonthCrimes)
 
-```
-```{r}
-
-# Add discrete version for Month and Year
 crimes <- prepare_crimes(crimes_df=crimes)
 
 crime_names <- colnames(crimes)[4:17]
@@ -42,11 +40,6 @@ crimes      <- split$train
 crimes_test <- split$test
 rm(split)
 
-
-summary(crimes)
-```
-
-```{r}
 # Take apart Queens from the borough and recompute the total
 
 split_out <- split_statenisland(crimes=crimes, crimes_test=crimes_test)
@@ -55,9 +48,7 @@ crimes         <- split_out$crimes
 crimes_test    <- split_out$crimes_test
 si_crimes      <- split_out$si_crimes
 si_crimes_test <- split_out$si_crimes_test
-```
 
-```{r}
 # Outliers
 
 for(borough in levels(crimes$Borough)) {
@@ -77,25 +68,33 @@ for(borough in levels(crimes$Borough)) {
 }
 ```
 
+## Poisson Model
+
+### Seasonal model
+
 ```{r}
 
 # Add constrast
-contrasts(crimes$MonthName) <- contr.sum(12)
-contrasts(crimes$Borough)   <- contr.sum(4)
+contrasts(crimes     $MonthName) <- contr.sum(12)
+contrasts(crimes_test$MonthName) <- contr.sum(12)
 
-models <- list()
+pois_models <- list()
 
 tapply(crimes$Shootings, crimes$Borough, mean)
 tapply(crimes$Shootings, crimes$Borough, var)
 
-models$steps <- glm(
+pois_models$seasonality <- glm(
     Shootings ~ Borough + MonthName,
     data = crimes,
     family = "poisson"
 )
 
+# TODO - Chiedere al colloquio perché non si può
+# https://stats.stackexchange.com/questions/418832/why-the-absence-of-probability-distribution-for-using-quasi-likelihood
+AIC(pois_models$seasonality)
+
 glm_diagnostic(
-    model = models$steps, 
+    model = pois_models$seasonality, 
     df_ = crimes, 
     gvif = FALSE,
     residuals = TRUE,
@@ -103,11 +102,11 @@ glm_diagnostic(
 )
 
 invisible(plot_model_predictions_per_level_over_time(
-    model = models$steps,
+    model = pois_models$seasonality,
     df_ = crimes,
     y = "Shootings",
     levels = "Borough",
-    title = "AAA",
+    title = "Shootings per Borough - Month seasonal model - Training set",
     ylab = "Shootings incidents",
     level = LEVEL,
     lwd = 0.5,
@@ -117,11 +116,11 @@ invisible(plot_model_predictions_per_level_over_time(
 ))
 
 invisible(plot_model_predictions_per_level_over_time(
-    model = models$steps,
+    model = pois_models$seasonality,
     df_ = crimes_test,
     y = "Shootings",
     levels = "Borough",
-    title = "AAA",
+    title = "Shootings per Borough - Month seasonal model - Test set",
     ylab = "Shootings incidents",
     level = LEVEL,
     lwd = 0.5,
@@ -130,37 +129,46 @@ invisible(plot_model_predictions_per_level_over_time(
     grid_rows = 2
 ))
 
-
-
 ```
+
+### Trended model
 
 ```{r}
 
-models$months_year <- glm(
+pois_models$trended <- glm(
     Shootings ~ Borough + MonthName + Year,
     data = crimes,
     family = poisson
 )
 
-glm_diagnostic(model=models$months_year, df_=crimes,
-gvif=TRUE, overdispersion=FALSE)
+glm_diagnostic(
+    model=pois_models$trended, 
+    df_=crimes,
+    gvif=TRUE, overdispersion=FALSE
+)
 
-models$months_year2 <- glm(
+pois_models$trended <- NULL
+
+pois_models$trended2 <- glm(
     Shootings ~ Borough + MonthName + poly(Year, 3),
     data = crimes,
     family = poisson
 )
 
-glm_diagnostic(model=models$months_year2, df_=crimes,
-gvif=FALSE, overdispersion=FALSE)
+glm_diagnostic(
+    model=pois_models$trended2, 
+    df_=crimes,
+    gvif=FALSE, 
+    overdispersion=FALSE
+)
 
 
 invisible(plot_model_predictions_per_level_over_time(
-    model = models$months_year2,
+    model = pois_models$trended2,
     df_ = crimes,
     y = "Shootings",
     levels = "Borough",
-    title = "AAA",
+    title = "Shootings per Borough - Trended model - Training set",
     ylab = "Shootings incidents",
     level = LEVEL,
     lwd = 0.5,
@@ -170,11 +178,11 @@ invisible(plot_model_predictions_per_level_over_time(
 ))
 
 invisible(plot_model_predictions_per_level_over_time(
-    model = models$months_year2,
-    df_ = crimes_time_test,
+    model = pois_models$trended2,
+    df_ = crimes_test,
     y = "Shootings",
     levels = "Borough",
-    title = "AAA",
+    title = "Shootings per Borough - Trended model - Test set",
     ylab = "Shootings incidents",
     level = LEVEL,
     lwd = 0.5,
@@ -199,258 +207,394 @@ linear_trend <- lm(
 )
 
 # First term test
+MONTHS <- 3
 first_test_epoch <- min(crimes_time_test$t)
 short_term_test <- crimes_time_test[
     crimes_time_test$t > first_test_epoch &
-    crimes_time_test$t < first_test_epoch + 2,
+    crimes_time_test$t < first_test_epoch + MONTHS,
 ]
 
-class(models$months_year2)
+class(pois_models$trended2)
 
 # Get prediction table
 stats_to_table(
     stats = get_models_prediction_stats(
         models = list(
-            quasipoisson = models$months_year2,
-            linear       = linear_trend
+            Poisson = pois_models$trended2,
+            Linear  = linear_trend
         ),
         df_ = short_term_test,
         y = "Shootings"
+))[, c(-1, -2)]
+
+rm(list = c(
+    "crimes_time", "crimes_time_test", "linear_trend", 
+    "first_test_epoch", "short_term_test", "MONTHS"
 ))
 
 
-
 ```
-
+### Total Arrests model
 ```{r}
-
-models$totarrests <- glm(
-    Shootings ~ TotArrests,
-    data = crimes, family="quasipoisson"
-)
-
-glm_diagnostic(
-    models$totarrests, df_=crimes,
-    gvif=FALSE, overdispersion = FALSE
-)
-
-models$totarrests2 <- glm(
-    Shootings ~ TotArrests + I(TotArrests^2),
-    data = crimes, family="quasipoisson"
-)
-
-glm_diagnostic(
-    models$totarrests2, df_=crimes,
-    gvif=FALSE, overdispersion = FALSE
-)
-
-models$totarrests3 <- glm(
-    Shootings ~ TotArrests + I(TotArrests^2) + I(TotArrests^3),
-    data = crimes, family="quasipoisson"
-)
-
-glm_diagnostic(
-    models$totarrests3, df_=crimes,
-    gvif=FALSE, overdispersion = FALSE
-)
-
-poly_models=list(
-    linear = models$totarrests,
-    square = models$totarrests2,
-    cubic  = models$totarrests3
-)
-
-plot_multiple_model_prediction(
-    df_=crimes,
-    models=poly_models,
-    x="TotArrests", y="Shootings", 
-    title="AAAAAAAA",
-    xlab="CCC", ylab ="BBBBBBBB",
-    jitter_=TRUE,
-    level = LEVEL,
-    colors = c("#ab1818e7", "#232390e7", "#29a529e7")
-)
-
-```
-
-```{r}
-models$arrests_borough <- glm(
+pois_models$totarrests <- glm(
     Shootings ~ Borough + TotArrests + I(TotArrests^2),
-    data = crimes, family = "quasipoisson"
+    data = crimes, family = "poisson"
 )
 
 glm_diagnostic(
-    models$arrests_borough, df_=crimes,
+    pois_models$totarrests, df_=crimes,
     gvif=FALSE, overdispersion = FALSE
 )
 
-plot_model_predictions_per_level_over_time(
-    model = models$arrests_borough,
-    df_=crimes,
-    y="Shootings",
-    levels="Borough",
-    title="AA",
-    ylab="BB",
-    level=LEVEL,
-    colors=unlist(PALETTE$boroughs),
+invisible(plot_model_predictions_per_level_over_time(
+    model = pois_models$totarrests,
+    df_ = crimes,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Total arrests model - Training set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 0.5,
+    lwd_observations = 0.5,
+    colors = unlist(PALETTE$boroughs),
     grid_rows = 2
-)
+))
+
+invisible(plot_model_predictions_per_level_over_time(
+    model = pois_models$totarrests,
+    df_ = crimes,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Total arrests model - Test set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 0.5,
+    lwd_observations = 0.5,
+    colors = unlist(PALETTE$boroughs),
+    grid_rows = 2
+))
 
 ```
 
+### Shrinkage for crimes across boroughs
 
 ```{r}
+SHRINKAGE_PREDICTORS <- c(crime_names, "Year", "MonthName", "TotArrests")
+COL = "(1se, alpha=1)"
 
-crime_names <- crime_names[crime_names != "Larceny"]
-crime_names
-
-pred_coefs <- matrix(
-    0., 
-    nrow = length(crime_names) + 1, 
-    ncol = length(levels(crimes$Borough))
-)
-rownames(pred_coefs) <- c(crime_names, "TotPredictors")
-colnames(pred_coefs) <- levels(crimes$Borough)
-pred_coefs <- data.frame(pred_coefs)
-pred_coefs
+out_cols <- list()
 
 for(borough in levels(crimes$Borough)) {
 
-    model_out <- shrinkage_selection(
+    print(paste("Borough crimes Shrinkage: ", borough))
+    out <- shrinkage_grid_search(
         df_ = crimes[
             crimes$Borough == borough, 
-            c(crime_names, "Shootings")
-        ],
-        y = "Shootings",
-        type = "1se",
-        title = paste("Lasso selection for ", borough),
-        family="poisson"
+            c(SHRINKAGE_PREDICTORS, "Shootings")
+        ], 
+        y="Shootings", 
+        alphas=c(0, 1)
     )
 
-    coefs <- coef(model_out)
-    pred_coefs[[borough]] <- c(
-        coefs[2:length(coefs)],
-        sum(coefs != 0) - 1
-    )
+    print(out)
+
+    colnames(out)
+
+    out_cols[[borough]] <- out[, c(COL)]
+
+    print("")
+
 }
 
-pred_coefs
+{
+out_df <- round(as.matrix(do.call(rbind, out_cols)), 3)
+colnames(out_df) <- rownames(out)
+out_df[out_df == 0] <- "."
+out_df <- as.data.frame(t(out_df), stringsAsFactors = FALSE)
+out_df
+}
+
+knit_table(out_df)
+
+rm("out_df", "COL", "out_cols")
+```
+
+### Shrinkage model
+
+```{r}
+coef(lm(Shootings ~ ., data = crimes[, c(SHRINKAGE_PREDICTORS, "Shootings")]))
 
 ```
 
 ```{r}
-models$lasso <- shrinkage_selection(
-        df_ = crimes[, c(crime_names, "Borough", "MonthName", "Shootings")
-        ],
-        y = "Shootings",
-        type = "1se",
-        title = paste("Lasso selection for ", borough),
-        family="poisson"
-    )
 
-coef(models$lasso)
+SHRINKAGE_PREDICTORS <- c(SHRINKAGE_PREDICTORS, "Borough")
+
+shrinkage_grid_search(
+    df_ = crimes[, c(SHRINKAGE_PREDICTORS, "Shootings")], 
+    y="Shootings", 
+    alphas=c(0, 1)
+)
 
 ```
 
 ```{r}
-plot_model_predictions_per_level_over_time(
-    model = models$lasso,
-    df_=crimes,
-    y="Shootings",
-    levels="Borough",
-    title="AA",
-    ylab="BB",
+pois_models$lasso <- shrinkage_selection(
+    df_ = crimes[, c(SHRINKAGE_PREDICTORS, "Shootings")],
+    y = "Shootings",
+    type = "1se",
+    alpha = 1,
+    title = paste("Lasso selection for NYC"),
+    family="poisson"
+)
+
+```
+
+```{r}
+
+invisible(plot_model_predictions_per_level_over_time(
+    model = pois_models$lasso,
+    df_ = crimes,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Lasso model - Training set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
     lwd = 0.5,
-    lwd_observations = 0.25,
-    level=LEVEL,
-    colors=unlist(PALETTE$boroughs),
-    grid_rows = 2,
-    glmnet_predictors = c(crime_names, "Borough", "MonthName")
-)
+    lwd_observations = 0.5,
+    colors = unlist(PALETTE$boroughs),
+    glmnet_predictors = SHRINKAGE_PREDICTORS,
+    grid_rows = 2
+))
 
-predict(
-    models$lasso,
+invisible(plot_model_predictions_per_level_over_time(
+    model = pois_models$lasso,
+    df_ = crimes_test,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Lasso model - Test set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 0.5,
+    lwd_observations = 0.5,
+    colors = unlist(PALETTE$boroughs),
+    glmnet_predictors = SHRINKAGE_PREDICTORS,
+    grid_rows = 2
+))
 
-)
 ```
 
+### Stepwise model
+
 ```{r}
-models$murders <- glm(
-    Shootings ~ Borough + Murder + MonthName,
+stepwise_model <- step(
+    glm(
+        Shootings ~ .,
+        data = crimes[, c("Shootings", SHRINKAGE_PREDICTORS)],
+        family = poisson
+    ),
+    scope = list(lower = ~1, upper = ~.),
+    direction = "both",
+    trace = 0,
+    k = log(nrow(crimes)) # BIC
+)
+
+summary(stepwise_model)
+
+vif_diagnostic(stepwise_model)
+
+```
+
+
+### Crimes model
+```{r}
+pois_models$crimes <- glm(
+    Shootings ~ Borough + Bribery + SubstancePossession + MonthName,
     data = crimes, family = "poisson"
 )
 
-summary(models$murders)
-
 glm_diagnostic(
-    models$murders, df_=crimes,
-    gvif=FALSE, overdispersion = FALSE
+    pois_models$crimes, df_=crimes,
+    gvif=TRUE, overdispersion = FALSE
 )
 
-
-plot_model_predictions_per_level_over_time(
-    model = models$murders,
-    df_=crimes,
-    y="Shootings",
-    levels="Borough",
-    title="AA",
-    ylab="BB",
+invisible(plot_model_predictions_per_level_over_time(
+    model = pois_models$crimes,
+    df_ = crimes,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Crimes model - Training set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
     lwd = 0.5,
-    lwd_observations = 0.25,
-    level=LEVEL,
-    colors=unlist(PALETTE$boroughs),
-    grid_rows = 2,
-    glmnet_predictors = c(crime_names, "Borough", "MonthName")
-)
+    lwd_observations = 0.5,
+    colors = unlist(PALETTE$boroughs),
+    glmnet_predictors = SHRINKAGE_PREDICTORS,
+    grid_rows = 2
+))
 
-predict(
-    models$murders,
-    data.frame(
-        Borough = "Brooklyn",
-        MonthName = "Jan",
-        Murder = seq(0, 1000, 100)
-    )
-)
-
+invisible(plot_model_predictions_per_level_over_time(
+    model = pois_models$crimes,
+    df_ = crimes_test,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Crimes model - Test set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 0.5,
+    lwd_observations = 0.5,
+    colors = unlist(PALETTE$boroughs),
+    glmnet_predictors = SHRINKAGE_PREDICTORS,
+    grid_rows = 2
+))
 
 ```
 
+### Model comparison
+
 ```{r}
-models$crimes <- glm(
-    Shootings ~ Borough + SubstancePossesion + MonthName + Bribery,
-    data = crimes, family = "poisson"
-)
-
-glm_diagnostic(
-    models$crimes, df_=crimes,
-    gvif=FALSE, overdispersion = FALSE
-)
-
-
-plot_model_predictions_per_level_over_time(
-    model = models$crimes,
-    df_=crimes,
-    y="Shootings",
-    levels="Borough",
-    title="AA",
-    ylab="BB",
-    lwd = 0.5,
-    lwd_observations = 0.25,
-    level=LEVEL,
-    colors=unlist(PALETTE$boroughs),
-    grid_rows = 2,
-    glmnet_predictors = c(crime_names, "Borough", "MonthName")
-)
-
+pois_models$borough_mean <- glm(Shootings ~ Borough, data=crimes, family = "poisson")
 ```
 
 ```{r}
 models_stats <- get_models_prediction_stats(
-    models = models,
+    models = pois_models,
+    df_ = crimes_test,
+    y = "Shootings",
+    glmnet_predictors = SHRINKAGE_PREDICTORS
+)
+out_table <- stats_to_table(models_stats)[, -c(1, 2)]
+out_table
+
+```
+
+## Comparison with other Counting Models
+
+```{r}
+model.pois <- glm(
+    Shootings ~ Borough + Bribery + SubstancePossession + MonthName,
+    data = crimes, family = "poisson"
+)
+
+```
+
+### Quasi-poisson
+
+```{r}
+model.quasipois <- glm(
+    Shootings ~ Borough + Bribery + SubstancePossession + MonthName,
+    data = crimes, family = "quasipoisson"
+)
+
+summary(model.pois)
+summary(model.quasipois)
+
+(summary(model.quasipois))$dispersion
+```
+
+
+```{r}
+
+invisible(plot_model_predictions_per_level_over_time(
+    model = model.quasipois,
     df_ = crimes,
     y = "Shootings",
-    glmnet_predictors = c(crime_names, "MonthName", "Borough")
-)
-out_table <- stats_to_table(models_stats)
-out_table
+    levels = "Borough",
+    title = "Shootings per Borough - Quasipoisson - Training set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 0.5,
+    lwd_observations = 0.5,
+    colors = unlist(PALETTE$boroughs),
+    glmnet_predictors = SHRINKAGE_PREDICTORS,
+    grid_rows = 2
+))
+
+invisible(plot_model_predictions_per_level_over_time(
+    model = model.quasipois,
+    df_ = crimes_test,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Quasipoisson - Test set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 0.5,
+    lwd_observations = 0.5,
+    colors = unlist(PALETTE$boroughs),
+    glmnet_predictors = SHRINKAGE_PREDICTORS,
+    grid_rows = 2
+))
+
 ```
+
+### Negative Binomial
+
+```{r}
+
+model.nb <- glm.nb(
+    Shootings ~ Borough + Bribery + SubstancePossession + MonthName,
+    data = crimes
+)
+
+summary(model.nb)
+
+
+coef(model.nb)[2:4]
+coef(model.pois)[2:4]
+
+coef(model.nb)[5:6]
+coef(model.pois)[5:6]
+
+coef(model.nb)[7:17]
+coef(model.pois)[7:17]
+
+```
+
+### GAM
+
+```{r}
+model.gam_pois <- gam(
+    Shootings ~ Borough + s(Bribery) + s(SubstancePossession) + MonthName,
+    data = crimes,
+    family = poisson
+)
+
+model.gam_nb <- gam(
+    Shootings ~ Borough + s(Bribery) + s(SubstancePossession) + MonthName,
+    data = crimes,
+    family = nb
+)
+
+summary(model.gam_pois)
+summary(model.gam_nb)
+
+```
+
+### Comparison
+
+```{r}
+AIC(model.pois, model.nb, model.gam_pois, model.gam_nb)
+BIC(model.pois, model.nb, model.gam_pois, model.gam_nb)
+```
+
+```{r}
+
+models_stats <- get_models_prediction_stats(
+    models = list(
+        Pois    = model.pois,
+        QPois   = model.quasipois,
+        NegBin  = model.nb,
+        GAMPois = model.gam_pois,
+        GAMNb   = model.gam_nb
+    ),
+    df_ = crimes_test,
+    y = "Shootings",
+    glmnet_predictors = SHRINKAGE_PREDICTORS
+)
+out_table <- stats_to_table(models_stats)[, -c(1, 2)]
+out_table
+
+```
+
+
+

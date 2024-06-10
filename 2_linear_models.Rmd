@@ -1,12 +1,11 @@
 ---
-title: "NYC Shootings and Arrests - Data analysis"
+title: "NYC Shootings and Arrests - Linear Models"
 author: "Sebastiano Quintavale - 878500"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
     html_document:
         toc: true
         toc_float: true
-        number_sections: true
         theme: cerulean
         highlight: tango
 ---
@@ -132,14 +131,12 @@ plot_ts_stl_decomposition(
 )
 ```
 
-### Linar models
-
 ```{r}
 # Linear models
 si_models <- list()
 ```
 
-#### Null model
+### Null model
 
 ```{r}
 
@@ -158,7 +155,7 @@ si_crimes[c(9, 42), c("Year", "Month", "Shootings")]
 
 High number
 
-#### Month model
+### Month model
 
 ```{r}
 # Using month levels with constraints they sum up to 0
@@ -193,7 +190,7 @@ plot_model_coefficients(
 Only significant are the rwo month more distant to the mean, Feb in negative and july in postiive, the seasonal effect has impact on just one number of shootings as shown in the stl decomposition.
 
 
-#### Crimes models
+### Crimes models
 ```{r}
 
 si_models$crimes <- lm(
@@ -211,7 +208,7 @@ lm_diagnostic(
 All significative. Similar adjusted R^2
 Vif no multicollineratiy
 
-#### Step wise regression
+### Step wise regression
 
 ```{r}
 # Select the best model using step subset selection leaps library
@@ -250,7 +247,7 @@ Still
 
 ### Model comparison
 
-#### Prediciton plots
+### Prediciton plots
 
 Train
 
@@ -287,7 +284,7 @@ invisible(plot_multiple_model_predictions_over_time(
 ))
 ```
 
-#### Prediction metrics
+### Prediction metrics
 
 ```{r}
 knit_table(
@@ -336,14 +333,13 @@ for (borough in unique(crimes$Borough)) {
 
 ```
 
-### Linear models
 
 Introduction
 ```{r}
 models <- list()
 ```
 
-#### Month seasonality
+### Month seasonality
 
 Scatterplot monthly.
 ```{r}
@@ -363,14 +359,11 @@ Clear seasonal effect with a rise in the summer period a smaller rise in january
 
 ```{r}
 
-# Fit a quadratic model with different coefficients for each borough
 contrasts(crimes     $MonthName) <- contr.sum(12)
 contrasts(crimes_test$MonthName) <- contr.sum(12)
-contrasts(crimes     $Borough)   <- contr.sum (4)
-contrasts(crimes_test$Borough)   <- contr.sum (4)
 
 models$month_steps <- lm(
-    Shootings ~ MonthName * Borough,
+    Shootings ~ MonthName + Borough,
     data = crimes
 )
 
@@ -414,7 +407,7 @@ plot_model_predictions_per_level_over_time(
 
 
 
-
+### Periodic model
 
 ```{r}
 # Add time indicator
@@ -433,8 +426,6 @@ lm_diagnostic(
     vif = FALSE,
     influencial_points = FALSE
 )
-
-
 
 invisible(
 plot_model_predictions_per_level_over_time(
@@ -470,6 +461,8 @@ plot_model_predictions_per_level_over_time(
 
 
 ```
+
+### Total Arrests
 
 ```{r}
 
@@ -568,6 +561,8 @@ plot_model_predictions_per_level_over_time(
 ))
 ```
 
+### Crimes model
+
 ```{r}
 
 models$crimes <- lm(
@@ -613,11 +608,40 @@ plot_model_predictions_per_level_over_time(
 
 ```
 
+### Time and Criminality
+
 ```{r}
 
+models$crimes_and_time <- lm(
+    Shootings ~ Murder + Assaults + SubstancePossession + 
+                t + I(t^2) + I(t^3) + sin(2 * pi * t / 12) + cos(2 * pi * t / 12) + Borough,
+    data = crimes
+)
+
+lm_diagnostic(
+    lm = models$crimes_and_time,
+    influencial_points = FALSE,
+    effects = FALSE,
+    vif = FALSE
+)
+
+# TODO Chiedere al colloquio
+vif(models$crimes)
+vif(models$crimes_and_time)
+
+```
+
+### Shrinkage selection
+
+```{r}
+
+# TODO Chiedere al colloquio se escludere Larceny
+SHRINKAGE_PREDICTORS <- c(
+    CRIME_NAMES, "Borough", "Year", "MonthName", "TotArrests"
+)
 
 shrinkage_grid_search(
-    df_ = crimes[, c(CRIME_NAMES, "Borough", "Shootings")], 
+    df_ = crimes[, c(SHRINKAGE_PREDICTORS, "Shootings")], 
     y="Shootings", 
     alphas=c(0, 1)
 )
@@ -627,7 +651,7 @@ shrinkage_grid_search(
 ```{r}
 
 models$shrinkage <- shrinkage_selection(
-    df_ = crimes[, c(CRIME_NAMES, "Borough", "Shootings")],
+    df_ = crimes[, c(SHRINKAGE_PREDICTORS, "Shootings")],
     y = "Shootings",
     type = "1se",
     alpha = 1
@@ -648,7 +672,7 @@ plot_model_predictions_per_level_over_time(
     level = LEVEL,
     lwd = 0.35,
     lwd_observations = 0.35,
-    glmnet_predictors = c(CRIME_NAMES, "Borough"),
+    glmnet_predictors = SHRINKAGE_PREDICTORS,
     colors = unlist(PALETTE$boroughs),
     grid_rows = 2
 ))
@@ -666,7 +690,7 @@ plot_model_predictions_per_level_over_time(
     lwd = 0.35,
     lwd_observations = 0.35,
     colors = unlist(PALETTE$boroughs),
-    glmnet_predictors = c(CRIME_NAMES, "Borough"),
+    glmnet_predictors = SHRINKAGE_PREDICTORS,
     grid_rows = 2
 ))
 
@@ -674,19 +698,24 @@ plot_model_predictions_per_level_over_time(
 
 ```
 
+### Model comparison
+
 ```{r}
+models$borough_mean <- lm(Shootings ~ Borough, data=crimes)
+```
+
+```{r}
+
 
 models_stats <- get_models_prediction_stats(
     models = models,
-    df_ = crimes,
+    df_ = crimes_test,
     y = "Shootings",
-    glmnet_predictors = c(CRIME_NAMES, "Borough")
+    glmnet_predictors = SHRINKAGE_PREDICTORS
 )
 out_table <- stats_to_table(models_stats)
 out_table
 
-kable(out_table, format = "html") %>%
-    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
 ```
 
 

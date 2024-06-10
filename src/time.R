@@ -84,9 +84,9 @@ ts_crimes_reshape <- function(df_) {
     df_long <- df_long %>%
         arrange(Year, MonthName)
 
-    # Pivot back to wide format
+    # # Pivot back to wide format
     df_wide <- df_long %>%
-        select(-MonthName, -Year) %>%
+        dplyr::select(-MonthName, -Year) %>%
         pivot_wider(names_from = YearMonth, values_from = Count)  
     
     return(
@@ -109,7 +109,7 @@ ts_borough_reshape <- function(df_, crime_type) {
 
     # Pivot back to wide format
     df_wide <- df_long %>%
-        select(-MonthName, -Year) %>%
+        dplyr::select(-MonthName, -Year) %>%
         pivot_wider(names_from = YearMonth, values_from = !!crime_type)
 
     return(aux_reshape_postprocess(df_=df_wide, id.vars="Borough"))

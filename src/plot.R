@@ -806,6 +806,7 @@ plot_model_predictions_per_level_over_time <- function(
         }
         if (length(colors) > 0) {
             p <- p + scale_color_manual(values=colors)
+            p <- p + scale_fill_manual(values=colors)
         }
 
     } else {

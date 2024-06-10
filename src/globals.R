@@ -10,16 +10,15 @@
 # --- PACKAGES ---
 
 REQUIREMENTS <- c(
-    "car",         "chron",        "corrplot", 
-    "dplyr",       "effects",      "factoextra", 
-    "forecast",    "ggplot2",      "glmnet", 
-    "glmnetUtils", "grid",         "gridExtra", 
-    "kableExtra",  "leaps",        "lubridate", 
-    "Matrix",      "performance",  "RColorBrewer",
-    "reshape2",    "scales",       "tidyr",      
-    "tsoutliers"
+    "car",          "chron",        "corrplot", 
+    "dplyr",        "effects",      "factoextra", 
+    "forecast",     "ggplot2",      "glmnet", 
+    "glmnetUtils",  "grid",         "gridExtra", 
+    "kableExtra",   "leaps",        "lubridate", 
+    "Matrix",       "MASS",         "mgcv",
+    "performance",  "RColorBrewer", "reshape2",  
+    "scales",       "tidyr",        "tsoutliers"
 )
-
 
 # --- FILE PATHS ---
 
@@ -37,6 +36,14 @@ LANG    <- "en_US.UTF-8"  # Language
 
 
 # --- DATA ---
+
+LEVELS_ORDER <- c(
+    "Manhattan",
+    "Queens",
+    "Bronx",
+    "Brooklyn",
+    "StatenIsland"
+)
 
 LEVEL <- 0.95  # Confidence level for the prediction intervals
 

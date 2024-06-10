@@ -77,8 +77,8 @@ setup_environment <- function() {
 prepare_crimes <- function(crimes_df, col_merge = TRUE) {
 
     # Cast Borough to factor and set their order
-    crimes_df$Borough   <- as.factor(crimes_df$Borough)
-    
+    crimes_df$Borough <- factor(crimes_df$Borough, levels = LEVELS_ORDER)
+
     # Add a discrete variant of the Month 
     crimes_df$MonthName <- as.factor(month.abb[crimes_df$Month])
     crimes_df$MonthName <-    factor(crimes_df$MonthName, levels = month.abb) # reorder levels by month
