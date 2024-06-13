@@ -298,7 +298,8 @@ plot_model_coefficients <- function(
 pca_analysis <- function(
     df_, features, levels,
     explained       = TRUE,
-    individual_vars = TRUE,
+    individual      = TRUE,
+    vars            = TRUE,
     biplot          = TRUE,
     biplot_title    = "Biplot - PCA",
     individuals     = "Individuals - PCA",
@@ -362,22 +363,20 @@ pca_analysis <- function(
         )
     }
 
-    if(individual_vars) {
+    if(individual) {
+        print(fviz_pca_ind(
+            pca_out, col.ind = "cos2", repel = TRUE,
+            title = individuals,
+            gradient.cols = PALETTE$pca$gradient
+        ))
+    }
 
-        grid.arrange(
-            grobs = list(
-                ind = fviz_pca_ind(
-                    pca_out, col.ind = "cos2", repel = TRUE,
-                    title = individuals,
-                    gradient.cols = PALETTE$pca$gradient),
-                var = fviz_pca_var(
-                    pca_out, col.var = "contrib", repel = TRUE,
-                    title = variables,
-                    gradient.cols = PALETTE$pca$gradient)
-            ),
-            ncol = 2
-        )
-
+    if(vars) {
+        print(fviz_pca_var(
+            pca_out, col.var = "contrib", repel = TRUE,
+            title = variables,
+            gradient.cols = PALETTE$pca$gradient
+        ))
     }
 
     if(biplot) {
@@ -427,7 +426,10 @@ shrinkage_grid_search <- function(df_, y, alphas)  {
     # Combine all data frames by row names
     combined_df <- do.call(cbind, coefs_df_list)
     colnames(combined_df) <- names(coefs)
-    
+
+    # Add NonZero counts
+    combined_df <- rbind(combined_df, SelectedPredictors = apply(combined_df, 2, function(x) sum(x != 0)))
+
 
     return(combined_df)
 
@@ -487,6 +489,17 @@ shrinkage_selection <- function(
         family=family, alpha=alpha, 
         lambda=best.lambda
     )
+
+    # Compute log likelihood
+    y_pred <- predict(final_model, newx = df_x)
+    residuals <- df_y - y_pred
+    rss <- sum(residuals^2)
+    n <- length(df_y)
+    sigma2 <- rss / n
+
+    # Compute the log-likelihood for a Gaussian model # TODO Change for Poisson
+    log_likelihood <- -n/2 * (log(2 * pi * sigma2) + 1)
+    final_model$loglik <- log_likelihood
 
     return(final_model)
 
@@ -661,10 +674,14 @@ get_models_prediction_stats <- function(
     y,
     glmnet_predictors = c()
 ) {
+
     
     return (
         
         lapply(models, function(model) {
+
+            # Prediction statistics
+            pred_stats <- get_prediction_stats(model, df_, y, glmnet_predictors=glmnet_predictors)
 
             # R2 and Adj R2
             if("lm" %in% class(model)) {
@@ -682,10 +699,16 @@ get_models_prediction_stats <- function(
                 }
             
             } else {
-                r_squared     <- NA
+
+                r_squared <- NA
                 adj_r_squared <- NA
-                aic           <- NA
-                bic           <- NA
+
+                n   <- nobs(model)
+                k   <- sum(coef(model) != 0)
+
+                aic <- - 2 * model$loglik +      2 * k 
+                bic <- - 2 * model$loglik + log(n) * k
+
             }
 
             

@@ -267,3 +267,32 @@ knit_table <- function(table) {
         kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
 
 }
+
+prepare_outliers <- function(crimes_df) {
+
+    for(y in c("Shootings", CRIME_NAMES)){
+
+        for(borough in levels(crimes_df$Borough)) {
+
+            outliers_out <- outliers_diagnostic(
+                df_ = crimes_df[crimes_df$Borough == borough,],
+                y = y,
+                title = borough,
+                ylab = "Shootings incidents",
+                colors = PALETTE$outliers
+            )    
+
+            crimes_df <- replace_outliers(
+                df_=crimes_df,
+                y = y,
+                outliers = outliers_out$outliers,
+                level=borough
+            )
+
+        }
+    }
+
+    crimes_df$TotArrests <- rowSums(crimes_df[, CRIME_NAMES])
+
+    return(crimes_df)
+}

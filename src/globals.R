@@ -56,7 +56,6 @@ CRIME_NAMES <- c(
     "Burglary",
     "DrugParaphernalia",
     "LicensingFirearm",
-    "Forgery",
     "Larceny",
     "Mischief",
     "MarijuanaPossession",
@@ -64,17 +63,14 @@ CRIME_NAMES <- c(
     "Robbery",
     "SubstancePossession",
     "Theft",
-    "Trespass",
     "WeaponPossession"
 )
 
 # Aggregation
-
 CRIME_FAMILIES <- list(
-    "IllegalPossesion" = c("MarijuanaPossession", "SubstancePossession", "WeaponPossession"),
-    "AgainstProperty"  = c("Robbery", "Theft", "Trespass"),
-    "Offense"          = c("Assault", "Mischief"),
-    "Drop"             = c("Larceny")
+    "Offense"     = c("Assault", "Mischief", "Robbery"),
+    "DrugRelated" = c("MarijuanaPossession", "SubstancePossession", "DrugParaphernalia"),
+    "Drop"        = c("Larceny", "WeaponPossession")
 )
 
 # --- COLORS ---
@@ -84,10 +80,10 @@ ALPHA_CH <- 0.25  # Alpha channel for the colors
 PALETTE <- list(
 
     boroughs = list(
-        Bronx        = "#e33f1add",
-        Brooklyn     = "#1f78b4dd",
         Manhattan    = "#33a02cdd",
         Queens       = "#6a3d9add",
+        Bronx        = "#e33f1add",
+        Brooklyn     = "#1f78b4dd",
         StatenIsland = "#ff7f00dd"
     ),
 
@@ -107,10 +103,11 @@ PALETTE <- list(
     ),
 
     crimes = c(
-        "#ff5722ee", "#ff9800ee", "#ffc107ee", "#ffeb3bee", 
-        "#cddc39ee", "#8bc34aee", "#4caf50ee", "#009688ee", 
-        "#00bcd4ee", "#03a9f4ee", "#2196f3ee", "#3f51b5ee", 
-        "#637ab7ee", "#9c27b0ee", "#e81e63ee", "#540404ee"
+        "#FF0000", "#FF7600", "#FFEB00",
+        "#9DFF00", "#158f00", "#00FFC4", 
+        "#00C4FF", "#00458f", "#9D00FF", 
+        "#FF00EB", "#FF0076", "#520404",
+        "#766242"
     ),
 
     outliers = list(

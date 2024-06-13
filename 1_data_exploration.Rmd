@@ -38,15 +38,25 @@ crimes <- read.csv(PATHS$NycMonthCrimes)
 
 The dataset has `r nrow(crimes)` rows and `r ncol(crimes)` columns.
 
-View some rows and summary of the dataset as recap
+Prepare dataset
+- shift columns (start by February)
+- add MonthName
+- add T
+
 
 ```{r}
 
 # Add discrete version for Month and Year
 prepare_out <- prepare_crimes(crimes_df=crimes, use_families=FALSE)
-crimes <- prepare_out$df
+crimes      <- prepare_out$df
 
 rm(prepare_out)
+```
+
+
+View some rows and summary of the dataset.
+
+```{r}
 
 summary(crimes)
 head(crimes, 25)
@@ -100,15 +110,17 @@ plot_multiple_ts(
     xlab   = "Year",
     ylab   = "Incidents",
     title  = "Criminality in NYC - 2006 to 2021 ",
-    lwd    = 0.6,
+    lwd    = 0.7,
     ticks  = 7,
-    colors = PALETTE$crimes
+    colors = PALETTE$crimes,
+    legend.size = 15
 )
 
 ```
 
-
+Good for overview but better inspect each in deatail.
 Different scale and trend.
+
 We plot each individual and visualize the time series for each borough.
 
 ```{r fig.width=16, fig.height=12}
@@ -153,6 +165,9 @@ plot_in_grid <- function(plot_list, ncol = 1, title = "", title.size=15, height 
     ))
 
 }
+```
+
+```{r}
 
 ts_plots <- list()
 
@@ -165,14 +180,14 @@ for (i in 1:length(CRIME_NAMES)) {
             df_ = crimes[, c("Borough", "Year", "MonthName", crime_name)],
             crime_type = crime_name
         ),
-        ylab   = ifelse((i-1) %% 5 == 0, "Arrests", ""),
+        ylab   = ifelse((i-1) %% 4 == 0, "Arrests", ""),
         group  = "Borough",
         title  = paste(crime_name),
-        lwd    = 0.6,
+        lwd    = 0.5,
         colors = unlist(PALETTE$boroughs),
         ticks  = 3,
         legend = FALSE,
-        title_size = 9
+        title_size = 11
     )
 
 }
@@ -180,7 +195,7 @@ for (i in 1:length(CRIME_NAMES)) {
 
 plot_in_grid(
     plot_list = ts_plots,
-    ncol = 5,
+    ncol = 4,
     title = "Crimes in NYC - 2006 to 2021"
 )
 
@@ -188,9 +203,9 @@ rm(ts_plots)
 
 ```
 
-Some comments patterns and variability
+Some comments patterns of different patterns and variability.
 
-Let's see total number compared with the shootings.
+Let's better see the number compared with the shootings.
 ```{r}
 
 ts_plots <- list()
@@ -218,7 +233,8 @@ plot_in_grid(
     plot_list = ts_plots,
     ncol = 2,
     title = "Arrests and Shootings in NYC - 2006 to 2021",
-    height = 0.1
+    height = 0.1,
+    title.size = 20
 )
 
 rm(ts_plots)
@@ -226,6 +242,8 @@ rm(ts_plots)
 ```
 
 Trend in TotArrests
+
+Different comparison between arrests and shootings in terms of effect in boroughs.
 
 
 ### Scatterplots
@@ -241,7 +259,7 @@ BOROUGH_LEGEND <- extract_legend(
         y       = "Shootings",
         levels  = "Borough",
         legend.direction = "horizontal",
-        legend.size      = 15,
+        legend.size      = 13,
         colors = unlist(PALETTE$boroughs)
     )
 
@@ -296,7 +314,7 @@ for (i in 1:length(CRIME_NAMES)) {
         df_     = crimes,
         x       = crime,
         y       = "Shootings",
-        ylab    = ifelse((i-1) %% 5 == 0, "Shootings", ""),
+        ylab    = ifelse((i-1) %% 4 == 0, "Shootings", ""),
         levels  = "Borough",
         title   = paste(crime),
         title_size = 9,
@@ -311,7 +329,7 @@ for (i in 1:length(CRIME_NAMES)) {
 
 plot_in_grid(
     plot_list = scatterplots,
-    ncol = 5,
+    ncol = 4,
     title = "Crimes impact on shootings in NYC - 2006 to 2023"
 )
 
@@ -319,14 +337,16 @@ rm(scatterplots)
 
 ```
 
+Better inspect TotArrests
+
 ```{r}
 
 levels_scatterplot(
     df_     = crimes,
     x       = "TotArrests",
     y       = "Shootings",
-    xlab    = "Arrests",
-    ylab    = "Shootings",
+    xlab    = "Total Arrests",
+    ylab    = "Shootings Incidents",
     levels  = "Borough",
     title   = "Total Arrests impact on  Shootings in NYC - 2016 to 2023",
     title_size = 14,
@@ -341,7 +361,6 @@ levels_scatterplot(
 ```
 
 Remarks:
-Outliers
 - StatenInsland very few crimes and shootings
 - In general Bronx and Brooklyn tends to behave similar, and Queens and Manhattan tends to behave similar.
 - There's a decrease to 2020 and then raise
@@ -382,7 +401,7 @@ summary(si_crimes)
 
 df_group_stats(si_crimes, "Year", "Shootings")
 
-knit_table(t(df_group_stats(si_crimes, "Year", "Shootings")))
+knit_table((df_group_stats(si_crimes, "Year", "Shootings")))
 ```
 
 Month 
@@ -390,13 +409,13 @@ Month
 knit_table(df_group_stats(si_crimes, "MonthName", "Shootings"))
 ```
 
+Very few variation
+
 
 ### Outliers
 
 Outliers substitution
 
-Use tso 
-
 ```{r}
 plot_multiple_ts(
     df_ts = ts_borough_reshape(
@@ -412,63 +431,72 @@ plot_multiple_ts(
 )
 ```
 
+Particulary problematic with picks.
+
+Use tso - expalin
+
+Let's see if they can be detected
+
 ```{r}
+
+AAAA
 
 palette_outlier <- PALETTE$outliers
 
-plots <- list()
+for(y in c("Shootings", CRIME_NAMES)) {
 
-for(borough in levels(crimes$Borough)) {
+    outliers_plots <- list()
 
-    palette_outlier$ts <- PALETTE$boroughs[[borough]]
+    for(borough in levels(crimes$Borough)) {
 
-    outliers_out <- outliers_diagnostic(
-        df_ = crimes[crimes$Borough == borough,],
-        y = "Shootings",
-        colors = palette_outlier,
-        title = borough,
-        ylab = "Shootings incidents"
-    )
+        palette_outlier$ts <- PALETTE$boroughs[[borough]]
 
-    plots[[borough]] <- outliers_out$plot
+        outliers_out <- outliers_diagnostic(
+            df_ = crimes[crimes$Borough == borough,],
+            y = y,
+            colors = palette_outlier,
+            title = borough,
+            ylab = "Shootings incidents"
+        )
+
+        outliers_plots[[borough]] <- outliers_out$plot
+        
+
+        crimes <- replace_outliers(
+            df_=crimes,
+            y = y,
+            outliers = outliers_out$outliers,
+            level=borough
+        )
+
+    }
+
+    if(y == "Shootings") {
+        plot_in_grid(
+            plot_list = outliers_plots,
+            ncol = 2,
+            title = paste(y, "outliers"),
+        )
+    }
     
-
-    crimes <- replace_outliers(
-        df_=crimes,
-        y = "Shootings",
-        outliers = outliers_out$outliers,
-        level=borough
-    )
 
 }
 
-grid.arrange(grobs=plots, ncol=2)
+crimes$TotArrests <- rowSums(crimes[, CRIME_NAMES], na.rm = TRUE)
 
-rm(list=c("plots", "palette_outlier"))
 
 ```
+
+Only two observations.
 https://www.nytimes.com/2020/09/02/nyregion/nyc-shootings-murders.html
 
 Here new data
-```{r}
-plot_multiple_ts(
-    df_ts = ts_borough_reshape(
-        df_ = crimes[, c("Borough", "Year", "MonthName", "Shootings")],
-        crime_type = "Shootings"
-    ),
-    group = "Borough",
-    xlab = "Year",
-    ylab = "Incidents",
-    title = paste("Shootings in NYC"),
-    lwd = 0.7,
-    colors = unlist(PALETTE$boroughs)
-)
-```
+
+
 
 
 
 ### Larceny clusters
-
 
 Isseu with Larceny that had a step time series and two clusters
 ```{r}
@@ -485,7 +513,7 @@ levels_scatterplot(
     jitter_ = TRUE,
     ticks   = 10,
     shape   = 19,
-    size    = 1.5,
+    size    = 2,
     colors  = unlist(PALETTE$boroughs)
 )
 ```
@@ -538,24 +566,24 @@ df_level$Period <- as.factor(ifelse(
     df_level$Year %in% 2014:2019, "A", "B"
 ))
 
-fit_1 <- lm(Shootings ~ Larceny, data = df_level)
-coefficients(fit_1)
+fit1 <- lm(Shootings ~ Larceny, data = df_level)
+coefficients(fit1)
 
-fit_2 <- lm(Shootings ~ Larceny + Period, data = df_level)
-coefficients(fit_2)
+fit2 <- lm(Shootings ~ Larceny + Period, data = df_level)
+coefficients(fit2)
 
 grid.arrange(
     grobs = list(
         fit1 = plot_model_prediction(
             df_=df_level,
-            model=fit_1,
+            model=fit1,
             points_size = 2,
             xlab = "Larceny arrests", ylab = "Shootings incidents",
             x="Larceny", y="Shootings"
         ),
         fit2 = plot_model_prediction_per_level(
             df_=df_level,
-            model=fit_2,
+            model=fit2,
             x="Larceny", y="Shootings", levels="Period",
             points_size = 2,
             colors  = c("#153283", "#ff7300"),
@@ -597,13 +625,15 @@ plot(allEffects(full_model))
 
 Lot of negative, meaning that there'is collinearity.
 
+We can also appreaciate problemsn with variability for some crimes, indicating the absence of datapoints for certain ranges of observations, (LicensingFirearm, Weapon Possession)
+
 ```{r}
 vif_diagnostic(full_model) 
 
 rm(full_model)
 ```
 
-
+Strong avidence for certain predictors
 
 We now all are positive correlated, negative correlation synyomatic of collinearity. 
 Also VIF index says is. Dangerous for model fitting and automatic seleciton.
@@ -619,19 +649,26 @@ plot_correlation_matrix(
 )
 ```
 
-### Crimes Scatterplots
+### Aggregating crime families
+
+Plot scatterplots of involved ones.
 
 ```{r}
-# plot(crimes[, CRIME_NAMES])
+COLLINEAR <- c(
+    "Assault", 
+    "Mischief", 
+    "MarijuanaPossession", 
+    "Robbery", 
+    "SubstancePossession",
+    "WeaponPossession"
+)
+
+plot(crimes[, COLLINEAR])
 ```
 
 
-### PCA Biplot
 
-We need to see if we can manage to aggregate some crime in a family. Let's see if the biplot can help
-
-
-### Principal Component Analysis
+#### Principal Component Analysis
 
 Let's see PCA variablity for different boroughs.
 
@@ -641,77 +678,69 @@ pca_analysis(
     df_          = crimes,
     features     = c(CRIME_NAMES, "Shootings"),
     levels       = "Borough",
+    individual   = FALSE,
     biplot_title = "PCA - Crimes in NYC",
     individuals  = "Boroughs - PCA",
     variables    = "Crimes - PCA",
 )
 ```
 
-Larceny and Forgery - Burglary and Bribery - Robbery, DruguParahenalia
+Most of collnear in Brooklyn and Bronx
 
-Queens
-```{r}
+Assaults and Weapon possession along with shootings (and also mischief).
 
-pca_analysis(
-    df_       = crimes[crimes$Borough != "Queens", ],
-    features  = c(CRIME_NAMES, "Shootings"),
-    levels    = "Borough",
-    biplot_title     = "PCA - Crimes in NYC",
-    explained = FALSE, individual_vars = FALSE
-)
+Marijuana and Substance Possession
 
-```
+Queens a part.
 
 
-3 possession
-Bribery and Burglary
-MIschief and DrugParaphernalia
+#### Domain knowledge
 
-### Crimes Descriptions
+* **Assault** - An intentional act of causing physical injury to another person, including various degrees of assault such as third-degree assault, assault on a peace officer, and unclassified assault.
 
-**Assault** - The act of inflicting physical harm or unwanted physical contact upon a person. (*it* Aggressione)
+* **Burglary** - The unlawful entry into a building or residential or commercial area with the intent to commit a crime, including burglary in a residence at night, burglary in a commercial area during the day, and unclassified burglary.
 
-**Burglary** - Unlawful entry into a building or structure with the intent to commit a crime, usually theft. (*it* Furto con scasso)
+* **Drug Paraphernalia** - The possession, sale, or distribution of tools used for the consumption, production, or sale of narcotics, including various degrees of possession and sale of such paraphernalia.
 
-**Drug Paraphernalia** - Equipment, products, and materials used or intended for use in producing, concealing, or consuming illegal drugs. (*it* Paraphernalia per droghe)
+* **Larceny** - The unlawful taking of another person's property with the intent to permanently deprive the owner of their possessions, including petit larceny from open areas, grand larceny of auto, larceny by extortion, and theft of credit cards.
 
-**Firearm** - The illicit production of firearms. (*it* Produzione illecita di armi)
+* **Licensing Firearm** - The possession, use, or distribution of firearms without the necessary license or in violation of firearm licensing laws, including criminal disposal of firearms.
 
-**Forgery** - The act of falsifying documents, signatures, or other items with the intent to deceive or defraud. (*it* Falsificazione)
+* **Marijuana Possession** - The unlawful possession, sale, or distribution of marijuana, including various degrees of possession and sale of marijuana and the unlawful sale of synthetic marijuana.
 
-**Larceny** - The unlawful taking and carrying away of someone else's personal property with the intent to permanently deprive the owner of its possession. (*it* Approprazione di proprietà)
+* **Mischief** - The intentional destruction or damage to another person's property, including various degrees of criminal mischief, graffiti, damage to motor vehicles, and damage by fire or explosives.
 
-**Mischief** - Willful damage or destruction of property, also known as vandalism. (*it* Danneggiamento)
+* **Murder** - The intentional and unlawful killing of another person, including unclassified murder.
 
-**Marijuana Sell/Possession** - The act of selling or possessing marijuana, which is illegal under certain jurisdictions. (*it* Vendita/Possesso di marijuana)
+* **Robbery** - The use of force or threat of force to take property from another person, including robbery in open areas, carjacking, and robbery at gas stations.
 
-**Murder** - The unlawful premeditated killing of one human being by another. (*it* Omicidio)
+* **Substance Possession** - The unlawful possession, sale, or distribution of controlled substances, including various degrees of possession, sale, and intent to sell controlled substances.
 
-**Robbery** - The taking of property from a person by force or intimidation. (*it* Rapina)
+* **Theft** - The unlawful use of services without due payment, including theft of cable TV services and unclassified related offenses.
 
-**Substance Possession** - The act of having control over a controlled substance without legal authorization. (*it* Possesso di sostanze)
+* **Weapon Possession** - The unlawful possession, use, or distribution of weapons, including various degrees of weapon possession, manufacturing and transportation of weapons, and prohibited use of weapons, including imitation pistols.
 
-**Theft** - The act of taking someone else's property with the intent to permanently deprive them of it. (*it* Furto)
-
-**Trespass** - The act of unlawfully entering or remaining on someone else's property. (*it* Violazione di domicilio)
-
-**Weapons Possession** - The act of owning, carrying, or controlling a weapon, typically illegal in certain contexts. (*it* Possesso di armi)
 
 ```{r}
 CRIME_FAMILIES <- list(
-    "IllegalPossesion" = c("MarijuanaPossession", "SubstancePossession", "WeaponPossession"),
-    "AgainstProperty"  = c("Robbery", "Theft", "Trespass"),
-    "Offense"          = c("Assault", "Mischief"),
-    "Drop"             = c("Larceny")
+    "Offense"  = c("Assault", "Mischief", "Robbery"),
+    "DrugRelated"     = c("MarijuanaPossession", "SubstancePossession", "DrugParaphernalia"),
+    "Drop"     = c("Larceny", "WeaponPossession")
 )
+
+CRIME_NAMES
 
 ```
 
 ```{r}
 
-for(fam_name in names(CRIME_FAMILIES)) {
+# crimes_old         <- crimes
+# CRIME_NAMES_old <- CRIME_NAMES
 
-    print(fam_name)
+crimes <- crimes_old
+CRIME_NAMES <- CRIME_NAMES_old
+
+for(fam_name in names(CRIME_FAMILIES)) {
 
     cols <- CRIME_FAMILIES[[fam_name]]
 
@@ -736,21 +765,21 @@ CRIME_NAMES <- CRIME_NAMES[!CRIME_NAMES %in% "Drop"]
 
 ### Redo
 
+
+
 ```{r}
+
 
 full_model <- lm(
     Shootings ~ .,
     data = crimes[, c("Shootings", CRIME_NAMES)]
 )
 
-plot(allEffects(full_model))
 
-```
-
-Lot of negative, meaning that there'is collinearity.
-
-```{r}
 vif_diagnostic(full_model) 
+
+rm(full_model)
+
 ```
 
 ```{r}
