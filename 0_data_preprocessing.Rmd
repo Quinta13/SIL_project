@@ -55,13 +55,13 @@ BOROUGH_LOWERCASE_MAP <- c(
 CRIME_TYPES <- list(
 
     # Aggressione
-    Assaults = c(
+    Assault = c(
         "ASSAULT 3",                 "ASSAULT 2,1,UNCLASSIFIED", 
         "ASSAULT 2,1,PEACE OFFICER", "ASSAULT POLICE/PEACE OFFICER"
     ),
 
     # Possesso e vendita di marijuana
-    MarijuanaSellPossession = c(  
+    MarijuanaPossession = c(  
         "MARIJUANA, POSSESSION 4 & 5", "MARIJUANA, SALE 4 & 5",    "MARIJUANA, POSSESSION 1, 2 & 3",
         "MARIJUANA, POSSESSION",       "MARIJUANA, SALE 1, 2 & 3", "UNLAWFUL SALE SYNTHETIC MARIJUANA"
     ),
@@ -73,7 +73,7 @@ CRIME_TYPES <- list(
     ),
 
     # Arma da fuoco
-    Firearm = c( 
+    LicensingFirearm = c( 
         'CRIMINAL DISPOSAL FIREARM 1 & 2', "CRIMINAL DISPOSAL FIREARM 1 &", "CRIMINAL DISPOSAL FIREARM 1",
         "LICENSING FIREARMS",              "FIREARMS LICENSING LAWS"
     ),
@@ -95,7 +95,7 @@ CRIME_TYPES <- list(
     ),
 
     # Possesso di armi
-    WeaponsPossession = c( 
+    WeaponPossession = c( 
         "WEAPONS, POSSESSION, ETC",   "WEAPONS POSSESSION 3",                    "WEAPONS POSSESSION 1 & 2",
         "WEAPONS,MFR,TRANSPORT,ETC.", "WEAPONS,PROHIBITED USE",                  "WEAPONS,DISPOSITION OF",
         "WEAPONS DISPOSITION OF",     "WEAPONS,PROHIBITED USE IMITATION PISTOL", "WEAPONS,PROHIBITED USE IMITATI"
@@ -127,7 +127,7 @@ CRIME_TYPES <- list(
     ),
 
     # Trasgressione
-    Trepass = c(  
+    Trespass = c(  
         "TRESPASS 3, CRIMINAL", "TRESPASS 2, CRIMINAL", "TRESPASS 4,CRIMINAL",
         "TRESPASS 1,CRIMINAL",  "TRESPASS 4,CRIMINAL SUB 2"
     ),
@@ -136,11 +136,6 @@ CRIME_TYPES <- list(
     Burglary = c(  
         "BURGLARY,UNCLASSIFIED,UNKNOWN TIME", "BURGLARY,UNCLASSIFIED,UNKNOWN",
         "BURGLARY,RESIDENCE,NIGHT",           "BURGLARY,COMMERCIAL,DAY"
-    ),
-
-    # Corruzione
-    Bribery = c(  
-        "BRIBERY,PUBLIC ADMINISTRATION", "BRIBERY,COMMERCIAL", "BRIBERY,FRAUD"
     ),
 
     # Omicidio

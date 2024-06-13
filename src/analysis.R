@@ -6,6 +6,10 @@ vif_diagnostic <- function(model) {
     # Calculate VIF values
     vif_values <- vif(model)
 
+    if(! "numeric" %in% class(vif_values)) {
+        return(gvif_diagnostic(model))
+    }
+
     # Create an empty data frame to store the results
     vif_df <- data.frame(
         VIF = numeric(),
@@ -42,7 +46,7 @@ vif_diagnostic <- function(model) {
 
 
 lm_diagnostic <- function(
-    lm, 
+    model, 
     residuals          = TRUE,
     normality          = TRUE,
     influencial_points = TRUE,
@@ -52,17 +56,17 @@ lm_diagnostic <- function(
 ) {
 
     # Print the summary
-    print(summary(lm))
+    print(summary(model))
 
     # Residuals
     if(residuals) {
-        residualPlots(lm)
+        residualPlots(model)
     }
 
     # Normality
     if(normality) {
         qqPlot(
-            residuals(lm), 
+            residuals(model), 
             ylab = "Residuals quantiles", 
             xlab = "Normal quantiles"
         )
@@ -70,19 +74,19 @@ lm_diagnostic <- function(
 
     # Influencial points
     if(influencial_points) {
-        influenceIndexPlot(lm, vars = "Cook")
+        influenceIndexPlot(model, vars = "Cook")
     }
 
     # Effects
     if(effects) {
-        if (length(effects_sub) > 0) { plot(allEffects(lm)[effects_sub]) }
-        else                         { plot(allEffects(lm))              }
+        if (length(effects_sub) > 0) { plot(allEffects(model)[effects_sub]) }
+        else                         { plot(allEffects(model))              }
     }
 
     # VIF
     if(vif) {
         print("VIF diagnostic")
-        print(vif_diagnostic(lm))
+        print(vif_diagnostic(model))
         print("")
     }
 
@@ -227,6 +231,8 @@ gvif_diagnostic <- function(model) {
             stringsAsFactors = FALSE)
         )
     }
+
+    rownames(vif_df) <- rownames(vif_values)
 
     # Return the data frame
     return(vif_df)
@@ -746,11 +752,11 @@ df_group_stats <- function(data, group_col, value_col) {
         "Std"  = stats_table[[2]][, 3]
     )
 
-    stats_table[[group_col]] <- stats_table$tmp
+    rownames(stats_table) <- stats_table$tmp
     stats_table$tmp <- NULL
 
     # Reorder stats_table columns
-    stats_table <- stats_table[, c(group_col, "Mean", "Var", "Std")]
+    stats_table <- stats_table[, c("Mean", "Var", "Std")]
 
     return(stats_table)
 }

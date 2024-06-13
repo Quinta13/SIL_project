@@ -27,7 +27,12 @@ source("src/init.R")
 crimes <- read.csv(PATHS$NycMonthCrimes)
 
 # Add discrete version for Month and Year
-crimes <- prepare_crimes(crimes_df=crimes)
+prepare_out <- prepare_crimes(crimes_df=crimes)
+
+crimes      <- prepare_out$df
+CRIME_NAMES <- prepare_out$crime_names
+
+rm(prepare_out)
 
 # Split Train and Test
 split <- train_test_split_by_year(df_ = crimes, year_test = YEAR_TEST)
@@ -41,6 +46,8 @@ crimes         <- split_out$crimes
 crimes_test    <- split_out$crimes_test
 si_crimes      <- split_out$si_crimes
 si_crimes_test <- split_out$si_crimes_test
+
+rm(split_out)
 
 for(borough in levels(crimes$Borough)) {
 
@@ -68,27 +75,6 @@ for(borough in levels(crimes$Borough)) {
 
 plot(si_crimes)
 
-# Arrange the plots in a 2x3 grid
-grid.arrange(
-    grobs = lapply(
-        c("Year", "Month", "Murder", "Assaults", "Robbery", "TotArrests"),
-        function(element) {
-            basic_scatterplot(
-                x = element,
-                y = "Shootings",
-                data = si_crimes,
-                jitter_ = TRUE,
-                title = element,
-                size = 1.5
-            )
-        }
-    ), 
-    top = grid::textGrob(
-        "StatenInsland - Criminality and time impact on Shootings",
-        gp = grid::gpar(fontsize = 16, fontface = "bold")
-    ),
-    ncol = 3
-)
 ```
 
 ### Overview
@@ -96,12 +82,12 @@ grid.arrange(
 Average per year
 
 ```{r}
-knit_table(df_group_stats(si_crimes, "Year", "Shootings"))
+knit_table(round(t(df_group_stats(si_crimes, "Year", "Shootings")), 3))
 ```
 
 Month 
 ```{r}
-knit_table(df_group_stats(si_crimes, "MonthName", "Shootings"))
+knit_table(round(t(df_group_stats(si_crimes, "MonthName", "Shootings")), 3))
 ```
 
 
@@ -115,6 +101,7 @@ plot_ts(
     y     = "Shootings",
     ylab  = "Shootings",
     title = "Shootings in StatenIsland",
+    title.size = 18,
     lwd   = 0.7,
     col   = "#030a35"
 ) +
@@ -193,16 +180,16 @@ Only significant are the rwo month more distant to the mean, Feb in negative and
 ### Crimes models
 ```{r}
 
-si_models$crimes <- lm(
-    Shootings ~ Murder + Robbery,
-    data = si_crimes
-)
-
-lm_diagnostic(
-    si_models$crimes,
-    influencial_points = FALSE,
-    effects = FALSE
-)
+# si_models$crimes <- lm(
+#     Shootings ~ AgainstProperty,
+#     data = si_crimes
+# )
+# 
+# lm_diagnostic(
+#     si_models$crimes,
+#     influencial_points = FALSE,
+#     effects = FALSE
+# )
 ```
 
 All significative. Similar adjusted R^2
@@ -214,7 +201,7 @@ Vif no multicollineratiy
 # Select the best model using step subset selection leaps library
 subset_regression_info(
     subset_reg = regsubsets(
-        Shootings ~ . - TotArrests - Month,
+        Shootings ~ . - Year - TotArrests - Month,
         data = si_crimes,
         nvmax = 21
     )
@@ -391,10 +378,10 @@ plot_model_predictions_per_level_over_time(
 invisible(
 plot_model_predictions_per_level_over_time(
     model = models$month_steps,
-    df_ = crimes,
+    df_ = crimes_test,
     y = "Shootings",
     levels = "Borough",
-    title = "Shootings per Borough - Month seasonal model - Training set",
+    title = "Shootings per Borough - Month seasonal model - Test set",
     ylab = "Shootings incidents",
     level = LEVEL,
     lwd = 0.35,
@@ -412,11 +399,8 @@ plot_model_predictions_per_level_over_time(
 ```{r}
 # Add time indicator
 
-crimes$t      <- get_epoch(year = crimes$Year, month = crimes$Month)
-crimes_test$t <- get_epoch(year = crimes_test$Year, month = crimes_test$Month)
-
 models$periodic <- lm(
-    Shootings ~ t + I(t^2) + I(t^3) + sin(2 * pi * t / 12) + cos(2 * pi * t / 12) + Borough,
+    Shootings ~ T + I(T^2) + I(T^3) + sin(2 * pi * T / 12) + cos(2 * pi * T / 12) + Borough,
     data = crimes
 )
 
@@ -458,8 +442,17 @@ plot_model_predictions_per_level_over_time(
     grid_rows = 2
 ))
 
+```
 
-
+```{r}
+stats_to_table(get_models_prediction_stats(
+    models = list(
+        MonthSteps = models$month_steps,
+        Periodic = models$periodic
+    ),
+    df_ = crimes_test,
+    y = "Shootings"
+))[, 1:4]
 ```
 
 ### Total Arrests
@@ -561,19 +554,98 @@ plot_model_predictions_per_level_over_time(
 ))
 ```
 
-### Crimes model
-
 ```{r}
 
-models$crimes <- lm(
-    Shootings ~ Murder + Assaults + SubstancePossession,
+models$tot_arrests_I <- lm(
+    Shootings ~ TotArrests * Borough + I(TotArrests^2) * Borough,
     data = crimes
 )
 
 lm_diagnostic(
-    models$crimes,
-    effects=TRUE, influencial_points=FALSE
+    models$tot_arrests_I,
+    effects=FALSE, vif=FALSE, influencial_points=FALSE
 )
+
+stats_to_table(get_models_prediction_stats(
+    models = list(
+        TotArrests            = models$tot_arrests,
+        TotArrestsInteraction = models$tot_arrests_I
+    ),
+    df_ = crimes_test,
+    y = "Shootings"
+))[, 1:4]
+
+```
+
+### Crimes model
+
+```{r}
+one_crime_model <- list()
+
+for(crime in CRIME_NAMES) {
+    one_crime_model[[crime]] <- lm(
+        as.formula(paste0("Shootings ~", crime)),
+        data = crimes
+    )
+}
+
+stats_to_table(get_models_prediction_stats(
+    models = one_crime_model,
+    df_ = crimes,
+    y = "Shootings"
+))[, c(1, 3, 4)]
+
+```
+
+```{r}
+
+crime_tmp <- crimes[, !(names(crimes) %in% c("TotArrests", "Year"))]
+
+models$stepwise <- step(
+    lm(Shootings ~ 1, data=crime_tmp),
+    scope = list(lower = lm(Shootings ~ 1, data=crime_tmp), upper = lm(Shootings ~ ., data=crime_tmp)),
+    direction = "both",
+    k = log(nrow(crime_tmp))
+)
+
+lm_diagnostic(
+    final_model,
+    effects=TRUE, vif=TRUE
+)
+
+invisible(
+plot_model_predictions_per_level_over_time(
+    model = models$stepwise,
+    df_ = crimes,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Stepwise model - Training set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
+    colors = unlist(PALETTE$boroughs),
+    grid_rows = 2
+))
+
+invisible(
+plot_model_predictions_per_level_over_time(
+    model = models$stepwise,
+    df_ = crimes_test,
+    y = "Shootings",
+    levels = "Borough",
+    title = "Shootings per Borough - Stepwise model - Test set",
+    ylab = "Shootings incidents",
+    level = LEVEL,
+    lwd = 0.35,
+    lwd_observations = 0.35,
+    colors = unlist(PALETTE$boroughs),
+    grid_rows = 2
+))
+
+```
+
+```{r}
 
 invisible(
 plot_model_predictions_per_level_over_time(
@@ -608,28 +680,6 @@ plot_model_predictions_per_level_over_time(
 
 ```
 
-### Time and Criminality
-
-```{r}
-
-models$crimes_and_time <- lm(
-    Shootings ~ Murder + Assaults + SubstancePossession + 
-                t + I(t^2) + I(t^3) + sin(2 * pi * t / 12) + cos(2 * pi * t / 12) + Borough,
-    data = crimes
-)
-
-lm_diagnostic(
-    lm = models$crimes_and_time,
-    influencial_points = FALSE,
-    effects = FALSE,
-    vif = FALSE
-)
-
-# TODO Chiedere al colloquio
-vif(models$crimes)
-vif(models$crimes_and_time)
-
-```
 
 ### Shrinkage selection
 
@@ -637,13 +687,13 @@ vif(models$crimes_and_time)
 
 # TODO Chiedere al colloquio se escludere Larceny
 SHRINKAGE_PREDICTORS <- c(
-    CRIME_NAMES, "Borough", "Year", "MonthName", "TotArrests"
+    CRIME_NAMES, "Borough", "Year", "MonthName"
 )
 
 shrinkage_grid_search(
     df_ = crimes[, c(SHRINKAGE_PREDICTORS, "Shootings")], 
     y="Shootings", 
-    alphas=c(0, 1)
+    alphas=c(0, 1-0.002, 1)
 )
 
 ```
@@ -694,8 +744,12 @@ plot_model_predictions_per_level_over_time(
     grid_rows = 2
 ))
 
+```
 
+```{r}
+(models$shrinkage)
 
+sum(coef(models$shrinkage) != 0)
 ```
 
 ### Model comparison

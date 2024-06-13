@@ -52,22 +52,30 @@ ALPHA <- 1.    # Elastic net mixing parameter default
 YEAR_TEST <- c(2022, 2023)  # Year to use as test set
 
 CRIME_NAMES <- c(
-    "Assaults",
-    "Bribery",
+    "Assault",
     "Burglary",
     "DrugParaphernalia",
-    "Firearm",
+    "LicensingFirearm",
     "Forgery",
     "Larceny",
     "Mischief",
+    "MarijuanaPossession",
     "Murder",
     "Robbery",
     "SubstancePossession",
     "Theft",
-    "Trepass",
-    "WeaponsPossession"
+    "Trespass",
+    "WeaponPossession"
 )
 
+# Aggregation
+
+CRIME_FAMILIES <- list(
+    "IllegalPossesion" = c("MarijuanaPossession", "SubstancePossession", "WeaponPossession"),
+    "AgainstProperty"  = c("Robbery", "Theft", "Trespass"),
+    "Offense"          = c("Assault", "Mischief"),
+    "Drop"             = c("Larceny")
+)
 
 # --- COLORS ---
 
@@ -102,8 +110,7 @@ PALETTE <- list(
         "#ff5722ee", "#ff9800ee", "#ffc107ee", "#ffeb3bee", 
         "#cddc39ee", "#8bc34aee", "#4caf50ee", "#009688ee", 
         "#00bcd4ee", "#03a9f4ee", "#2196f3ee", "#3f51b5ee", 
-        "#637ab7ee", "#9c27b0ee", "#e81e63ee", "#f44336ee",
-        "#540404ee"
+        "#637ab7ee", "#9c27b0ee", "#e81e63ee", "#540404ee"
     ),
 
     outliers = list(

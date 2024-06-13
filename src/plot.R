@@ -128,7 +128,8 @@ levels_scatterplot <- function(
     colors     = c(),
     legend     = TRUE,
     legend.position  = "right",
-    legend.direction = "vertical"
+    legend.direction = "vertical",
+    legend.size      = 12
 ) {
     
     # Extract axis values
@@ -158,8 +159,11 @@ levels_scatterplot <- function(
             axis.text.y = element_text(),
             legend.position = legend.position,
             legend.direction = legend.direction,
-            plot.title = element_text(size = title_size)
+            plot.title = element_text(size = title_size),
+            legend.text = element_text(size = legend.size),
+            legend.title = element_text(size = legend.size + 2),
         ) +
+        guides(colour = guide_legend(override.aes = list(size=legend.size / 6))) + 
         scale_x_continuous(breaks = pretty_breaks(n = ticks))
 
     if(length(colors) > 0) {
@@ -206,6 +210,7 @@ plot_ts <- function(
     xlab   = "Year",
     ylab   = "",
     title  = "",
+    title.size = 15,
     col    = "#4683b4a3",
     lwd    = 1,
     ticks  = 10,
@@ -222,7 +227,10 @@ plot_ts <- function(
             y=ifelse(ylab == "", y, ylab),
             title=title
         ) +
-        theme(axis.text.x=element_text()) +
+        theme(
+            axis.text.x=element_text(),
+            plot.title = element_text(size = title.size)
+        ) +
         scale_x_date(breaks=pretty_breaks(n=ticks))
     
     if (length(yrange) > 0) {
@@ -245,6 +253,7 @@ plot_multiple_ts <- function(
     legend = TRUE,
     legend.position  = "right",
     legend.direction = "vertical",
+    legend.size      = 12,
     yrange = c()
 ) {
     p <- ggplot(
@@ -267,7 +276,10 @@ plot_multiple_ts <- function(
         axis.text.y = element_text(),
         legend.position = legend.position,
         legend.direction = legend.direction,
-        plot.title = element_text(size = title_size)
+        plot.title = element_text(size = title_size),
+        legend.text = element_text(size = legend.size),
+        legend.title = element_text(size = legend.size + 2),
+        legend.key.height = unit(legend.size/6, "lines")
     ) +
     scale_x_date(breaks = pretty_breaks(n = ticks))
 
@@ -499,7 +511,8 @@ plot_model_prediction_per_level <- function(
     points_size = 1,
     level = 0,
     colors = c(),
-    glmnet_predictors=c()
+    glmnet_predictors=c(),
+    legend = TRUE
 ) {
 
     levels_values <- levels(df_[[levels]])
@@ -566,6 +579,8 @@ plot_model_prediction_per_level <- function(
 
     }
 
+
+
     # Use scale_color_manual to specify the colors
     p <- p + scale_color_manual(values=colors, name=levels)
     p <- p + scale_fill_manual(values=colors, name=levels)
@@ -574,6 +589,10 @@ plot_model_prediction_per_level <- function(
     p <- p + guides(
         fill="none"
     )
+
+    if(!legend) {
+        p <- p + theme(legend.position = "none")
+    }
 
     return(p)
 

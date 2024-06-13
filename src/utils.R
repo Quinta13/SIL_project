@@ -74,7 +74,7 @@ setup_environment <- function() {
 #' head(crimes)
 #'
 #' @export
-prepare_crimes <- function(crimes_df, col_merge = TRUE) {
+prepare_crimes <- function(crimes_df, use_families = TRUE) {
 
     # Cast Borough to factor and set their order
     crimes_df$Borough <- factor(crimes_df$Borough, levels = LEVELS_ORDER)
@@ -84,17 +84,36 @@ prepare_crimes <- function(crimes_df, col_merge = TRUE) {
     crimes_df$MonthName <-    factor(crimes_df$MonthName, levels = month.abb) # reorder levels by month
 
     # Merge the two CrimeTypes related to Substance possession
-    if(col_merge) {
-        # Union of Marijuana and Other Drugs
-        crimes_df$SubstancePossession <- 
-            crimes_df$MarijuanaSellPossession + 
-            crimes_df$SubstancePossession
-        crimes_df$MarijuanaSellPossession <- NULL
+    if(use_families) {
+        
+        for(fam_name in names(CRIME_FAMILIES)) {
+
+            cols <- CRIME_FAMILIES[[fam_name]]
+
+            if(length(cols) == 1) {
+                crimes_df[[fam_name]] <- crimes_df[[cols[1]]]
+            } else {
+                crimes_df[[fam_name]] <- rowSums(crimes_df[, cols])
+            }
+            for (col in cols) {
+                crimes_df[[col]] <- NULL
+            }
+
+            CRIME_NAMES <- c(CRIME_NAMES, fam_name)
+            CRIME_NAMES <- CRIME_NAMES[!CRIME_NAMES %in% cols]
+        }
+
+        crimes_df$Drop <- NULL
+        CRIME_NAMES <- CRIME_NAMES[!CRIME_NAMES %in% "Drop"]
+    
     }
 
     # Use arrests in previous month as predictors
     first.year  <- crimes_df$Year[1]
     first.month <- crimes_df$Month[1]
+
+    # Add epochs
+    crimes_df$T <- get_epoch(crimes_df$Year, crimes_df$Month)
 
     # Loop through each column and create a new shifted column
     for (col in c(CRIME_NAMES, "TotArrests")) {
@@ -108,7 +127,16 @@ prepare_crimes <- function(crimes_df, col_merge = TRUE) {
         !(crimes_df$Year == first.year & crimes_df$Month == first.month), 
     ]
 
-    return(crimes_df)
+    # Reset rows
+    rownames(crimes_df) <- NULL
+
+    # Sort columns
+    crimes_df <- crimes_df[, c("Borough", "T", "Year", "Month", "MonthName", "Shootings" , CRIME_NAMES, "TotArrests")]
+
+    return(list(
+        df=crimes_df,
+        crime_names=CRIME_NAMES
+    ))
 
 }
 
@@ -226,7 +254,11 @@ return(df_)
 }
 
 get_epoch <- function(year, month) {
-    (year - min(crimes$Year)) * 12 + month
+
+    first.year <- year[1]
+    first.month <- month[1]
+
+    (year - first.year) * 12 + (month +1 - first.year) %% 12 - 1
 }
 
 knit_table <- function(table) {
