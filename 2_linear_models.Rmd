@@ -276,6 +276,7 @@ Discuss also in terms of varaiblity!
 ## NYC Boroughs
 
 
+
 ```{r}
 plot_prediction <- function(model, name, train=TRUE) {
 

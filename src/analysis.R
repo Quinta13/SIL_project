@@ -132,16 +132,30 @@ glm_plot_predictor_residuals <- function(
 
     # Generate a plot for each predictor
     for (pred in terms_used) {
+
+        if(class(df_[[pred]]) == "factor") {
+            p <- ggplot(df_, aes_string(x = pred, y = "residuals")) +
+            geom_boxplot(color = "#003865") +
+            labs(
+                x = element_blank(),
+                y = element_blank(),
+                title = pred,
+            ) +
+            theme_minimal()
+
+        } else {
+            
+            p <- ggplot(df_, aes_string(x = pred, y = "residuals")) +
+            geom_point(color = "#003865") +
+            geom_smooth(method = "loess", se = FALSE, color = "#ac0000f1") +
+            labs(
+                x = element_blank(),
+                y = element_blank(),
+                title = pred,
+            ) +
+            theme_minimal()
+        }
         
-        p <- ggplot(df_, aes_string(x = pred, y = "residuals")) +
-        geom_point(color = "#003865") +
-        geom_smooth(method = "loess", se = FALSE, color = "#ac0000f1") +
-        labs(
-            x = element_blank(),
-            y = element_blank(),
-            title = pred,
-        ) +
-        theme_minimal()
     
         plot_list[[pred]] <- p
     }
@@ -155,6 +169,7 @@ glm_plot_predictor_residuals <- function(
     )
 
 }
+
 
 
 glm_diagnostic <- function(
@@ -497,8 +512,23 @@ shrinkage_selection <- function(
     n <- length(df_y)
     sigma2 <- rss / n
 
-    # Compute the log-likelihood for a Gaussian model # TODO Change for Poisson
-    log_likelihood <- -n/2 * (log(2 * pi * sigma2) + 1)
+    if(family == "gaussian") {
+        log_likelihood <- -n/2 * (log(2 * pi * sigma2) + 1)
+    } else if(family == "poisson") {
+        
+        # pred_linear <- log(y_pred)
+        # term1 <- sum(df_y * pred_linear)
+        # term2 <- sum(log(factorial(df_y)))
+        # term3 <- sum(pred_linear)
+
+        # log_likelihood <- term1 - term2 - term3
+
+        log_likelihood <- -n/2 * (log(2 * pi * sigma2) + 1)
+        
+    } else {
+        log_likelihood <- NA
+    }
+
     final_model$loglik <- log_likelihood
 
     return(final_model)
@@ -627,13 +657,10 @@ generate_predictions_with_ci <- function(
         
     
     } else {
-        stop("Unkown model")
+        stop(paste("Model class not supported:", class(model)))
     }
 
     # Generate predictions with confidence intervals
-    
-    
-
     return(newdata)
 }
 
@@ -698,7 +725,7 @@ get_models_prediction_stats <- function(
                     bic = BIC(model)
                 }
             
-            } else {
+            } else if("glmnet" %in% class(model)) {
 
                 r_squared <- NA
                 adj_r_squared <- NA
@@ -709,6 +736,8 @@ get_models_prediction_stats <- function(
                 aic <- - 2 * model$loglik +      2 * k 
                 bic <- - 2 * model$loglik + log(n) * k
 
+            } else {
+                stop(paste("Model class not supported for model", class(model)))
             }
 
             

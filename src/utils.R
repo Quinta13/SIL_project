@@ -115,6 +115,9 @@ prepare_crimes <- function(crimes_df, use_families = TRUE) {
     # Add epochs
     crimes_df$T <- get_epoch(crimes_df$Year, crimes_df$Month)
 
+    crimes_df$CosT <- cos(2 * pi * crimes_df$T / 12)
+    crimes_df$SinT <- sin(2 * pi * crimes_df$T / 12)
+
     # Loop through each column and create a new shifted column
     for (col in c(CRIME_NAMES, "TotArrests")) {
         crimes_df[[col]] <- c(
@@ -131,7 +134,7 @@ prepare_crimes <- function(crimes_df, use_families = TRUE) {
     rownames(crimes_df) <- NULL
 
     # Sort columns
-    crimes_df <- crimes_df[, c("Borough", "T", "Year", "Month", "MonthName", "Shootings" , CRIME_NAMES, "TotArrests")]
+    crimes_df <- crimes_df[, c("Borough", "Year", "T", "CosT", "SinT", "Month", "MonthName", "Shootings" , CRIME_NAMES, "TotArrests")]
 
     return(list(
         df=crimes_df,
@@ -295,4 +298,12 @@ prepare_outliers <- function(crimes_df) {
     crimes_df$TotArrests <- rowSums(crimes_df[, CRIME_NAMES])
 
     return(crimes_df)
+}
+
+
+zero_to_point <-  function(df_) {
+    df_ <- as.matrix(df_)
+    df_[df_ == 0] <- "."
+    df_ <- as.data.frame(df_, stringsAsFactors = FALSE)
+    return(df_)
 }
