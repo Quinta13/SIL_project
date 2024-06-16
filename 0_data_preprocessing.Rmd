@@ -16,8 +16,8 @@ This document describes the data preprocessing phase of the project, which invol
 
 The two datasets used for the analysis are as follows:
 
-- **NYPD Shooting Incident Data**: This dataset contains information about shooting incidents in New York City from 2006 to 2023. It is available on the NYC Data Portal at the following [resource](https://data.cityofnewyork.us/Public-Safety/NYPD-Shooting-Incident-Data-Historic-/833y-fsy8).
-- **NYPD Arrest Data**: This dataset provides information about arrests in New York City from 2006 to 2023. It is available on the NYC Data Portal at the following [resource](https://data.cityofnewyork.us/Public-Safety/NYPD-Arrest-Data-Historic-/8h9b-rp9u).
+- **NYPD Shooting Incident Data** - This dataset contains information about shooting incidents in New York City from 2006 to 2023. It is available on the NYC Data Portal at the following [resource](https://data.cityofnewyork.us/Public-Safety/NYPD-Shooting-Incident-Data-Historic-/833y-fsy8).
+- **NYPD Arrest Data** - This dataset provides information about arrests in New York City from 2006 to 2023. It is available on the NYC Data Portal at the following [resource](https://data.cityofnewyork.us/Public-Safety/NYPD-Arrest-Data-Historic-/8h9b-rp9u).
 
 The goal of the preprocessing is to merge these two data sources and aggregate the shooting and arrest counts by month. Each entry in the resulting dataset will contain the number of **shootings** and **arrests** for different **crime types**, categorized by year, month, and New York City borough.
 
@@ -239,7 +239,7 @@ The final dataset consists of $`r nrow(shootings_month)`$ rows and $`r ncol(shoo
 
 - $`r length(unique(shootings_month$Borough))`$ different boroughs in the `Borough` column.
 - $`r length(unique(shootings_month$Month))`$ months in the `Month` column.
-- $`r max(shootings_month$Year) - min(shootings_month$Year) + 1` years, from $`r min(shootings_month$Year)`$ to $`r max(shootings_month$Year)`$, in the `Year` column.
+- $`r max(shootings_month$Year) - min(shootings_month$Year) + 1`$ years, from $`r min(shootings_month$Year)`$ to $`r max(shootings_month$Year)`$, in the `Year` column.
 - The shootings count for each year, month, and borough in the `Shootings` column.
 
 Here's the final summary of the dataset.
@@ -351,10 +351,10 @@ The final dataset consists of $`r nrow(arrests_month)`$ rows and $`r ncol(arrest
 - $`r length(unique(shootings_month$Borough))`$ different boroughs in column `Borough`.
 - $`r length(unique(shootings_month$Month))`$ months in column `Month`.
 - $`r max(shootings_month$Year) - min(shootings_month$Year) + 1`$ years, from $`r min(shootings_month$Year)`$ to $`r max(shootings_month$Year)`$, in column `Year`.
-- $`r length(unique(shootings_month$Crime))`$ different crime types in column `Crime`.
+- $`r length(unique(shootings_month$Crimes))`$ different crime types in column `Crime`.
 - The arrest count in column `Arrests` represents the number of arrests in the considered month, year, and borough for a specific crime type.
 
-To make the dataset sutiable for merge with the shootings dataset, it is reshaped to create a column for each crime type. Moreover wea add a column with the total number of arrests.
+To make the dataset sutiable for merge with the shootings dataset, it is reshaped to create a column for each crime type. Moreover we add a column with the total number of arrests.
 
 ```{r arrests reshaping}
 
@@ -383,7 +383,7 @@ summary(arrests_month)
 
 ## 4. Merge datasets
 
-We merge the two datasets to have a unique final wiew with the number of shootings and arrests for each borough, month and crime type. 
+We merge the two datasets to have a unique final view with the number of shootings and arrests for each borough, month and crime type. 
 
 ```{r merge datasets}
 
