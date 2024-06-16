@@ -109,7 +109,8 @@ lm_diagnostic <- function(
 
 glm_plot_predictor_residuals <- function(
     model, df_, 
-    residual_type = "pearson", ncol = 0
+    residual_type = "pearson", ncol = 0,
+    title = ""
 ) {
     
     # Extract residuals based on the specified type
@@ -174,7 +175,7 @@ glm_plot_predictor_residuals <- function(
     grid.arrange(
         grobs = plot_list, 
         ncol = ncol,
-        top = textGrob(paste(residual_type, "residuals - Predictors"), 
+        top = textGrob(paste(title, "-", residual_type, "residuals - Predictors"), 
         gp = gpar(fontsize = 16, fontface = "bold"))
     )
 
@@ -184,39 +185,23 @@ glm_plot_predictor_residuals <- function(
 
 glm_diagnostic <- function(
     model, df_, 
-    residuals = TRUE, qq = TRUE, 
-    gvif = TRUE, overdispersion = TRUE
+    residuals = FALSE, qq = FALSE, 
+    collinearity = FALSE, name = ""
 ) {
 
     # Summary
     print(summary(model))
 
     # VIF
-    if(gvif) {
-        print("GVIF")
+    if(collinearity) {
+        print(paste("GVIF", name))
         gvif_diagnostic(model)
-        print("")
-    }
-
-    if(qq) {
-        # QQ Plot
-        qqnorm(residuals(model, type = "deviance"))
-        qqline(
-            residuals(model, type = "deviance"), 
-            col = "#040475", lwd = 2, lty="dashed"
-        )
-    }
-
-    # Overdispersion
-    if(overdispersion && model$family$family == "poisson") {
-        print("OVERDISPERSION")
-        print(check_overdispersion(model))
         print("")
     }
 
     # Residuals
     if (residuals) {
-        glm_plot_predictor_residuals(model, df_)
+        glm_plot_predictor_residuals(model, df_, title=name)
     }
     
 
@@ -423,7 +408,7 @@ pca_analysis <- function(
 
 # --- PREDICTOR SELECTION ---
 
-shrinkage_grid_search <- function(df_, y, alphas)  {
+shrinkage_grid_search <- function(df_, y, alphas, family="gaussian")  {
 
     coefs <- list()
 
@@ -440,7 +425,8 @@ shrinkage_grid_search <- function(df_, y, alphas)  {
                     y = "Shootings",
                     type = type,
                     alpha = alpha,
-                    plot = FALSE
+                    plot = FALSE,
+                    family = family
                 )
             )
         }
