@@ -59,64 +59,45 @@ setup_environment <- function() {
 
 # --- DATA PREPARATION ---
 
-#' Prepare crimes data frame
-#'
-#' This function prepares the crimes data frame by converting the "Borough" column to a factor
-#' and setting the order of the levels. It also adds a discrete variant of the "Month" column
-#' by converting it to a factor and reordering the levels by month.
-#'
-#' @param crimes_df The input data frame containing crime data.
-#'
-#' @return The modified crimes data frame.
-#'
-#' @examples
-#' crimes <- prepare_crimes(crimes_data)
-#' head(crimes)
-#'
-#' @export
+
 prepare_crimes <- function(crimes_df, use_families = TRUE) {
 
-    # Cast Borough to factor and set their order
+    # 1. Cast Borough as factor
     crimes_df$Borough <- factor(crimes_df$Borough, levels = LEVELS_ORDER)
 
-    # Add a discrete variant of the Month 
+    # 2. Create Month factor column
     crimes_df$MonthName <- as.factor(month.abb[crimes_df$Month])
     crimes_df$MonthName <-    factor(crimes_df$MonthName, levels = month.abb) # reorder levels by month
 
-    # Merge the two CrimeTypes related to Substance possession
+    # 3. Merge column by family
     if(use_families) {
         
         for(fam_name in names(CRIME_FAMILIES)) {
 
             cols <- CRIME_FAMILIES[[fam_name]]
 
-            if(length(cols) == 1) {
-                crimes_df[[fam_name]] <- crimes_df[[cols[1]]]
-            } else {
-                crimes_df[[fam_name]] <- rowSums(crimes_df[, cols])
-            }
-            for (col in cols) {
-                crimes_df[[col]] <- NULL
-            }
+            # Sum arrests in family column
+            if(length(cols) == 1) { crimes_df[[fam_name]] <- crimes_df[[cols[1]]]       } 
+            else                  { crimes_df[[fam_name]] <- rowSums(crimes_df[, cols]) }
 
+            # Delete original columns
+            for (col in cols) crimes_df[[col]] <- NULL
+
+            # Mofify the crime names in the light of family aggregations
             CRIME_NAMES <- c(CRIME_NAMES, fam_name)
             CRIME_NAMES <- CRIME_NAMES[!CRIME_NAMES %in% cols]
+
         }
 
+        # Drop columns indicated in the Drop family
         crimes_df$Drop <- NULL
         CRIME_NAMES <- CRIME_NAMES[!CRIME_NAMES %in% "Drop"]
     
     }
 
-    # Use arrests in previous month as predictors
-    first.year  <- crimes_df$Year[1]
+    # 4. Shift arrests columns by one 
+    first.year  <- crimes_df$Year [1]
     first.month <- crimes_df$Month[1]
-
-    # Add epochs
-    crimes_df$T <- get_epoch(crimes_df$Year, crimes_df$Month)
-
-    crimes_df$CosT <- cos(2 * pi * crimes_df$T / 12)
-    crimes_df$SinT <- sin(2 * pi * crimes_df$T / 12)
 
     # Loop through each column and create a new shifted column
     for (col in c(CRIME_NAMES, "TotArrests")) {
@@ -130,11 +111,16 @@ prepare_crimes <- function(crimes_df, use_families = TRUE) {
         !(crimes_df$Year == first.year & crimes_df$Month == first.month), 
     ]
 
-    # Reset rows
-    rownames(crimes_df) <- NULL
+    # 5. Add epoch column
+    crimes_df$T <- get_epoch(crimes_df$Year, crimes_df$Month)
 
-    # Sort columns
-    crimes_df <- crimes_df[, c("Borough", "Year", "T", "CosT", "SinT", "Month", "MonthName", "Shootings" , CRIME_NAMES, "TotArrests")]
+    # 6. Add sin and cos columns
+    crimes_df$CosT <- round(cos(2 * pi * crimes_df$T / 12), 5)
+    crimes_df$SinT <- round(sin(2 * pi * crimes_df$T / 12), 5)
+
+    # Rows and columns postprocessing
+    rownames(crimes_df) <- NULL
+    crimes_df           <- crimes_df[, c("Borough", "Year", "T", "CosT", "SinT", "Month", "MonthName", "Shootings" , CRIME_NAMES, "TotArrests")]
 
     return(list(
         df=crimes_df,

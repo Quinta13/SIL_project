@@ -506,8 +506,6 @@ rownames(coef_comp) <- c("Poisson", "NegBin")
 colnames(coef_comp)[1] = "Intercept"
 colnames(coef_comp)[colnames(coef_comp) == "I.TotArrests.2."   ] = "TotArrests^2"
 
-coef_comp
-
 stats_to_table(get_models_prediction_stats(
     models = list(
         Poisson          = model.pois,

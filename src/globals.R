@@ -69,9 +69,9 @@ CRIME_NAMES <- c(
 
 # Aggregation
 CRIME_FAMILIES <- list(
-    "Offense"     = c("Assault", "Mischief", "Robbery"),
-    "DrugRelated" = c("MarijuanaPossession", "SubstancePossession", "DrugParaphernalia"),
-    "Drop"        = c("Larceny", "WeaponPossession")
+    "ViolenceAndDisruption" = c("Assault", "Mischief", "Robbery"),
+    "DrugRelated"           = c("MarijuanaPossession", "SubstancePossession", "DrugParaphernalia"),
+    "Drop"                  = c("Larceny", "WeaponPossession")
 )
 
 # --- COLORS ---
@@ -104,11 +104,11 @@ PALETTE <- list(
     ),
 
     crimes = c(
-        "#FF0000", "#FF7600", "#FFEB00",
-        "#9DFF00", "#158f00", "#00FFC4", 
-        "#00C4FF", "#00458f", "#9D00FF", 
-        "#FF00EB", "#FF0076", "#520404",
-        "#766242"
+        "#FF0000ee", "#FF7600ee", "#FFEB00ee",
+        "#9DFF00ee", "#158f00ee", "#00c597ee", 
+        "#00C4FFee", "#00458fee", "#9D00FFee", 
+        "#FF00EBee", "#FF0076ee", "#520404ee",
+        "#766242ee"
     ),
 
     outliers = list(

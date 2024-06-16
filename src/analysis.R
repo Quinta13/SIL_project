@@ -40,6 +40,10 @@ vif_diagnostic <- function(model) {
 
     rownames(vif_df) <- names(vif_values)
 
+    print(vif_df)
+    print("")
+    print("Legend: . < 2.5, * < 5, ** < 10, *** > 10")
+
     # Return the data frame
     return(vif_df)
 }
@@ -47,12 +51,13 @@ vif_diagnostic <- function(model) {
 
 lm_diagnostic <- function(
     model, 
-    residuals          = TRUE,
-    normality          = TRUE,
-    influencial_points = TRUE,
-    effects            = TRUE,
-    vif                = TRUE,
-    effects_sub = c()
+    residuals    = FALSE,
+    qq           = FALSE,
+    cook_dist    = FALSE,
+    effects      = FALSE,
+    collinearity = FALSE,
+    effects_sub  = c(),
+    name         = ""
 ) {
 
     # Print the summary
@@ -60,33 +65,38 @@ lm_diagnostic <- function(
 
     # Residuals
     if(residuals) {
-        residualPlots(model)
+        residualPlots(model, main = paste("Residuals -", name))
     }
 
     # Normality
-    if(normality) {
+    if(qq) {
         qqPlot(
             residuals(model), 
+            main = paste("QQ Plot -", name),
             ylab = "Residuals quantiles", 
             xlab = "Normal quantiles"
         )
     }
 
     # Influencial points
-    if(influencial_points) {
-        influenceIndexPlot(model, vars = "Cook")
+    if(cook_dist) {
+        influenceIndexPlot(
+            model, 
+            main = paste("Influence Index Plot -", name),
+            vars = "Cook"
+        )
     }
 
     # Effects
     if(effects) {
-        if (length(effects_sub) > 0) { plot(allEffects(model)[effects_sub]) }
-        else                         { plot(allEffects(model))              }
+        if (length(effects_sub) > 0) { plot(allEffects(model, main=paste("Effect plots -", name))[effects_sub]) }
+        else                         { plot(allEffects(model, main=paste("Effect plots -", name)))              }
     }
 
     # VIF
-    if(vif) {
-        print("VIF diagnostic")
-        print(vif_diagnostic(model))
+    if(collinearity) {
+        print(paste("VIF diagnostic -", name))
+        vif_diagnostic(model)
         print("")
     }
 
@@ -184,7 +194,7 @@ glm_diagnostic <- function(
     # VIF
     if(gvif) {
         print("GVIF")
-        print(gvif_diagnostic(model))
+        gvif_diagnostic(model)
         print("")
     }
 
@@ -248,6 +258,10 @@ gvif_diagnostic <- function(model) {
     }
 
     rownames(vif_df) <- rownames(vif_values)
+
+    print(vif_df)
+    print("")
+    print("Legend: . < 2.5, * < 5, ** < 10, *** > 10")
 
     # Return the data frame
     return(vif_df)
@@ -535,7 +549,7 @@ shrinkage_selection <- function(
 
 }
 
-subset_regression_info <- function(subset_reg) {
+subset_regression_info <- function(subset_reg, title="") {
 
     # Extract the summary information
     summary_ <- summary(subset_reg)
@@ -591,9 +605,7 @@ subset_regression_info <- function(subset_reg) {
 
         ncol = 2,
 
-        top = grid::textGrob("Subset Regression - Best number of predictors", gp = grid::gpar(fontsize = 16, fontface = "bold"))
-    )
-
+        top = grid::textGrob(paste(title, "- Subset Regression - Best number of predictors")), gp = grid::gpar(fontsize = 16, fontface = "bold"))
 
 }
 

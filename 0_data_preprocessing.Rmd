@@ -1,7 +1,6 @@
 ---
-title: "NYC Shootings and Arrests - Data preprocessing"
+title: "NYC Shootings incidents and Criminality <br> Data preprocessing"
 author: "Sebastiano Quintavale - 878500"
-date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
     html_document:
         toc: true
@@ -13,12 +12,14 @@ output:
 
 ## 1. Introduction
 
-This document describes the data preprocessing phase of the project. The goal is to clean and transform the raw data into a format that can be used for the analysis. The data used in this project are the following:
+This document describes the data preprocessing phase of the project, which involves the cleaning and transformation of the original data into a format suitable for analysis.
 
-- **NYPD Shooting Incident Data**: contains information about shooting incidents in New York City in the period 2006-2023. The dataset is available at NYC Data portal at the follwing [resource](https://data.cityofnewyork.us/Public-Safety/NYPD-Shooting-Incident-Data-Historic-/833y-fsy8).
-- **NYPD Arrest Data**: contains information about arrests in New York City in the period 2006-2023. The dataset is available at NYC Data portal at the following [resource](https://data.cityofnewyork.us/Public-Safety/NYPD-Arrest-Data-Historic-/8h9b-rp9u).
+The two datasets used for the analysis are as follows:
 
-The preprocissing has the goal of build a monthly dataset specifying the number of **shootings** and arrests for each borough and **crime type**. 
+- **NYPD Shooting Incident Data**: This dataset contains information about shooting incidents in New York City from 2006 to 2023. It is available on the NYC Data Portal at the following [resource](https://data.cityofnewyork.us/Public-Safety/NYPD-Shooting-Incident-Data-Historic-/833y-fsy8).
+- **NYPD Arrest Data**: This dataset provides information about arrests in New York City from 2006 to 2023. It is available on the NYC Data Portal at the following [resource](https://data.cityofnewyork.us/Public-Safety/NYPD-Arrest-Data-Historic-/8h9b-rp9u).
+
+The goal of the preprocessing is to merge these two data sources and aggregate the shooting and arrest counts by month. Each entry in the resulting dataset will contain the number of **shootings** and **arrests** for different **crime types**, categorized by year, month, and New York City borough.
 
 ```{r setup, echo=FALSE, include=FALSE}
 
@@ -27,15 +28,18 @@ knitr::opts_chunk$set(echo=FALSE)
 
 # Load R script sources
 source("src/init.R")
+
 ```
 
 ```{r names}
 
 # Columns to manipulate
+
 SHOOTINGS_COLS <- c("INCIDENT_KEY", "OCCUR_DATE",  "BORO")
 ARRESTS_COLS   <- c("ARREST_KEY",   "ARREST_DATE", "ARREST_BORO", "PD_DESC")
 
 # Name mappings
+
 BOROUGH_LETTER_MAP <- c(
     "B" = "BRONX",
     "K" = "BROOKLYN",
@@ -43,6 +47,7 @@ BOROUGH_LETTER_MAP <- c(
     "Q" = "QUEENS",
     "S" = "STATEN ISLAND"
 )
+
 
 BOROUGH_LOWERCASE_MAP <- c(
     "BRONX"         = "Bronx",
@@ -66,13 +71,13 @@ CRIME_TYPES <- list(
         "BURGLARY,RESIDENCE,NIGHT",           "BURGLARY,COMMERCIAL,DAY"
     ),
 
-    # Legati alla produzione di droga
+    # Armamentario di droga
     DrugParaphernalia = c(  
         "DRUG PARAPHERNALIA,   POSSESSES OR SELLS 2", "DRUG PARAPHERNALIA,   POSSESSE",
         "DRUG PARAPHERNALIA,   POSSESSES OR SELLS 1"
     ),
 
-    # Approprazione
+    # Furto di proprietà
     Larceny= c(
         "LARCENY,PETIT FROM OPEN AREAS,UNCLASSIFIED", "LARCENY,PETIT FROM OPEN AREAS,",           "LARCENY,GRAND FROM OPEN AREAS,UNCLASSIFIED",
         "LARCENY,GRAND FROM OPEN AREAS, UNATTENDED",  "LARCENY,GRAND OF AUTO",                    "LARCENY,GRAND FROM PERSON,UNCLASSIFIED",
@@ -82,14 +87,14 @@ CRIME_TYPES <- list(
         "LARCENY,GRAND FROM BUILDING (NON-RESIDENCE) UNATTENDED"
     ),
 
-    # Produzione Arma da fuoco
+    # Violation of firearm license
     LicensingFirearm = c( 
         'CRIMINAL DISPOSAL FIREARM 1 & 2', "CRIMINAL DISPOSAL FIREARM 1 &", "CRIMINAL DISPOSAL FIREARM 1",
         "LICENSING FIREARMS",              "FIREARMS LICENSING LAWS"
     ),
 
 
-    # Possesso e vendita di marijuana
+    # Possesso di marijuana
     MarijuanaPossession = c(  
         "MARIJUANA, POSSESSION 4 & 5", "MARIJUANA, SALE 4 & 5",    "MARIJUANA, POSSESSION 1, 2 & 3",
         "MARIJUANA, POSSESSION",       "MARIJUANA, SALE 1, 2 & 3", "UNLAWFUL SALE SYNTHETIC MARIJUANA"
@@ -113,7 +118,7 @@ CRIME_TYPES <- list(
         "ROBBERY,CARJACKING OF MV OTHER THAN TRUCK", "ROBBERY,CAR JACKING",            "ROBBERY,GAS STATION"
     ),
     
-    # Possesso e vendita di sostanza soggetta a controlli
+    # Possesso di sostanze
     SubstancePossession = c(  
         "CONTROLLED SUBSTANCE, POSSESSION 7", "CONTROLLED SUBSTANCE,INTENT TO SELL 3",  "CONTROLLED SUBSTANCE,SALE 3",
         "CONTROLLED SUBSTANCE, POSSESSI",     "CONTROLLED SUBSTANCE, INTENT TO SELL 5", "CONTROLLED SUBSTANCE,INTENT TO",
@@ -123,7 +128,7 @@ CRIME_TYPES <- list(
         "CONTROLLED SUBSTANCE,SALE 2",        "CONTROLLED SUBSTANCE, SALE 4",           "CONTROLLED SUBSTANCE,POSSESS. OF PROCURSERS"
     ),
 
-    # Furto
+    # Furto di servizi
     Theft = c( 
         "THEFT OF SERVICES, UNCLASSIFIED",     "THEFT OF SERVICES, UNCLASSIFIE",  "THEFT,RELATED OFFENSES,UNCLASSIFIED",
         "THEFT OF SERVICES- CABLE TV SERVICE", "THEFT,RELATED OFFENSES,UNCLASS"
@@ -145,13 +150,16 @@ CRIME_TYPES <- list(
 
 ## 2. Shootings data
 
-We load and preprocess the **shootings dataset** [`shootings.csv`](/data/shooting.csv) and we crate the columns suitable for aggregation purposes.
+We start by loading  the **shootings dataset** [`shootings.csv`](/data/shooting.csv).  
 
 ```{r load shootings}
 
 shootings <- read.csv(PATHS$Shootings)
 
+head(shootings, 10)
 ```
+
+We only keep the columns of interest, which are `INCIDENT_KEY`, `OCCUR_DATE`, and `BORO`, as we are primarily interested in identifying the time and location of the shootings to perform temporal and spatial aggregation. Although we could use the geocoordinates of the shootings for a custom spatial aggregation, their usage is not recommended in the [dataset footnotes](https://data.cityofnewyork.us/api/views/833y-fsy8/files/e4e3d86c-348f-4a16-a17f-19480c089429?download=true&filename=NYPD_Shootings_Incident_Level_Data_Footnotes.pdf). Therefore, a spatial aggregation by Borough is performed.
 
 ```{r shootings type casting}
 
@@ -176,10 +184,15 @@ date.last  <- max(shootings$OCCUR_DATE)
 shootings$OCCUR_DATE <- NULL
 
 head(shootings)
+```
+
+Here a summary of the shootings dataset.
+
+```{r}
 summary(shootings)
 ```
 
-We aggregate the shootings data by year, month and Borough to have a count of shootings for each month and borough.
+We can now aggregate the shootings data by year, month, and borough to obtain a count of shootings for each month and borough.
 
 ```{r shootings month aggregation}
 
@@ -222,13 +235,12 @@ rm(shootings_month_dummy)
 head(shootings_month)
 ```
 
-The final dataset consists of `r nrow(shootings_month)` rows and `r ncol(shootings_month)` columns. Each row represent:
+The final dataset consists of $`r nrow(shootings_month)`$ rows and $`r ncol(shootings_month)`$ columns. Each column represents:
 
-- `r length(unique(shootings_month$Borough))` different boroughs in column `Borough`.
-- `r length(unique(shootings_month$Month))` months in column `Month`.
-- `r max(shootings_month$Year) - min(shootings_month$Year) + 1` years, from `r min(shootings_month$Year)` to `r max(shootings_month$Year)`, in column `Year`
-
-The feature `Shootings` represent the number of shootings in the considered area and period.
+- $`r length(unique(shootings_month$Borough))`$ different boroughs in the `Borough` column.
+- $`r length(unique(shootings_month$Month))`$ months in the `Month` column.
+- $`r max(shootings_month$Year) - min(shootings_month$Year) + 1` years, from $`r min(shootings_month$Year)`$ to $`r max(shootings_month$Year)`$, in the `Year` column.
+- The shootings count for each year, month, and borough in the `Shootings` column.
 
 Here's the final summary of the dataset.
 
@@ -241,15 +253,17 @@ summary(shootings_month)
 
 ## 3. Arrests data
 
-As we did for the shooting data, we load and preprocess the **arrests dataset** [`arrests.csv`](/data/arrests.csv) and we crate the columns suitable for aggregation purposes. In addition to the year, month and borough, we also need to take in consideration the specific **crime type** the arrest occured.
-We only keep the type of crimes most frequent fifteen and possibily related with shootings. The crime types are the following : Assuault, Marijuana possesion and sell, Theft, Firearm, SubstancePossession, Robbery, Weapons possesion, Drug paraphernalia, Larceny, Mischief, Trepass, Burglary, Bribery, Murder and Forgery.
-
+Similarly to the shooting data, we load and preprocess the **arrests dataset** [`arrests.csv`](/data/arrests.csv) and create the columns suitable for temporal and spatial aggregation.
 
 ```{r load arrests}
 
 arrests <- read.csv(PATHS$Arrests)
 
+head(arrests)
 ```
+
+In addition to the year, month, and borough, we also need to consider the specific **crime type** for which the arrest occurred. We focus on twelve crime types that are very frequent and potentially related to shootings. The crime types are as follows: `Assault`, `Burglary`, `DrugParaphernalia`, `Larceny`, `LicensingFirearm`, `MarijuanaPossession`, `Mischief`, `Murder`, `Robbery`, `SubstancePossession`, `Theft`, and `WeaponPossession`.
+
 
 ```{r arrests}
 
@@ -277,11 +291,16 @@ arrests$ARREST_DATE  <- NULL
 arrests$ARREST_BORO  <- NULL
 
 head(arrests)
+```
+
+Below is a summary of the transformed dataset.
+
+```{r}
 summary(arrests)
 
 ```
 
-We aggregate the arrests to have a count of arrests for each month, borough and crime.
+We can now aggregate the arrests to obtain counts for each month, borough, and type of crime.
 
 ```{r arrests month aggregation}
 
@@ -320,20 +339,22 @@ arrests_month <- merge(
 arrests_month$Arrests[is.na(arrests_month$Arrests)] <- 0
 arrests_month$ArrestsDummy <- NULL
 
+# Reset rows
+rownames(arrests_month) <- NULL
+
 head(arrests_month)
 
 ```
 
-The final dataset consists of $16200$ rows and $5$ columns. Each row represent:
+The final dataset consists of $`r nrow(arrests_month)`$ rows and $`r ncol(arrests_month)`$ columns. Each column represents:
 
-- `r length(unique(shootings_month$Borough))` different boroughs in column `Borough`.
-- `r length(unique(shootings_month$Month))` months in column `Month`.
-- `r max(shootings_month$Year) - min(shootings_month$Year) + 1` years, from `r min(shootings_month$Year)` to `r max(shootings_month$Year)`, in column `Year`.
-- `r length(unique(shootings_month$Crimes))` different crime types in column `Crime`.
+- $`r length(unique(shootings_month$Borough))`$ different boroughs in column `Borough`.
+- $`r length(unique(shootings_month$Month))`$ months in column `Month`.
+- $`r max(shootings_month$Year) - min(shootings_month$Year) + 1`$ years, from $`r min(shootings_month$Year)`$ to $`r max(shootings_month$Year)`$, in column `Year`.
+- $`r length(unique(shootings_month$Crime))`$ different crime types in column `Crime`.
+- The arrest count in column `Arrests` represents the number of arrests in the considered month, year, and borough for a specific crime type.
 
-The `Arrests` feature represent the number of arrests in the considered area and period.
-
-However we prefer to rehsape the dataset to use the crime type as column in order to make the dataset suitable for the merge with shooting one.
+To make the dataset sutiable for merge with the shootings dataset, it is reshaped to create a column for each crime type. Moreover wea add a column with the total number of arrests.
 
 ```{r arrests reshaping}
 
@@ -352,7 +373,7 @@ arrests_month$TotArrests <- rowSums(arrests_month[, 4:ncol(arrests_month)], na.r
 head(arrests_month)
 ```
 
-The final summary of the dataset is the following.
+The final summary of the arrests dataset follows.
 
 ```{r arrests month summary}
 
@@ -362,7 +383,7 @@ summary(arrests_month)
 
 ## 4. Merge datasets
 
-We merge the two datasets to have a unique dataset with the number of shootings and arrests for each borough, month and crime type. We also create an artificial borough **NewYork** accounting for the total number of shootings and crimes in the city.
+We merge the two datasets to have a unique final wiew with the number of shootings and arrests for each borough, month and crime type. 
 
 ```{r merge datasets}
 
@@ -390,14 +411,13 @@ head(nyc_month_crimes)
 
 ```
 
-The final dataset has `r nrow(nyc_month_crimes)` rows and `r ncol(nyc_month_crimes)` columns. Each row represent:
+The final dataset has $`r nrow(nyc_month_crimes)`$ rows and $`r ncol(nyc_month_crimes)`$ columns. Each row represent:
 
-
-- `r length(unique(shootings_month$Borough))` different boroughs in column `Borough`.
-- `r length(unique(shootings_month$Month))` months in column `Month`.
-- `r max(shootings_month$Year) - min(shootings_month$Year) + 1` years, from `r min(shootings_month$Year)` to `r max(shootings_month$Year)`, in column `Year`.
-- `r 15` different crime columns, plus their total in column `TotArrests`.
-- The `Shootings` feature represent the number of shootings in the considered area and period.
+- $`r length(unique(shootings_month$Borough))`$ different boroughs in column `Borough`.
+- $`r length(unique(shootings_month$Month))`$ months in column `Month`.
+- $`r max(shootings_month$Year) - min(shootings_month$Year) + 1`$ years, from $`r min(shootings_month$Year)`$ to $`r max(shootings_month$Year)`$, in column `Year`.
+- $`r length(unique(shootings_month$Crime))`$ different crime columns, including the synthetic one `TotArrests` describing the total number of arrests for that crime type.
+- The `Shootings` feature represent the number of shootings in the considered area of the city and time period.
 
 
 ```{r save datasets}
@@ -409,4 +429,4 @@ write.csv(nyc_month_crimes, PATHS$NycMonthCrimes, row.names = FALSE)
 
 ```
 
-We save the dataset for the analysis in the [`nyc_month_crimes.csv`](/data/nyc_month_crimes.csv) file.
+We save the dataset for further analysis in the [`nyc_month_crimes.csv`](/data/nyc_month_crimes.csv) file.

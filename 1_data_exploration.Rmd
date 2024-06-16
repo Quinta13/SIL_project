@@ -1,7 +1,6 @@
 ---
-title: "NYC Shootings and Arrests - Data exploration"
+title: "NYC Shootings incidents and Criminality <br> Data exploration"
 author: "Sebastiano Quintavale - 878500"
-date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
     html_document:
         toc: true
@@ -12,7 +11,9 @@ output:
 
 ## 1. Introduction
 
-This notebook is intended to ...
+This notebook is designed to conduct an exploratory data analysis prior to the main analyses. The primary objective is to understand the structure of the data and the relationships between variables. 
+
+A better understanding of the data will undoubtedly lead to a better comprehension of the results obtained during the modeling phase. Additionally, it will provide valuable insights that can improve the modeling process.
 
 ```{r echo=FALSE, include=FALSE}
 
@@ -28,7 +29,8 @@ source("src/init.R")
 
 ### 1.1. Data preparation
 
-Load the data and prepare it for the analysis.
+To begin, we will read the data produced by an initial data preparation phase carried out in this other notebook [`0_data_preprocessing.Rmd`](./0_data_preprocessing.Rmd).
+
 ```{r}
 
 # Load data
@@ -36,25 +38,34 @@ crimes <- read.csv(PATHS$NycMonthCrimes)
 
 ```
 
-The dataset has `r nrow(crimes)` rows and `r ncol(crimes)` columns.
+The dataset has $`r nrow(crimes)`$ rows and $`r ncol(crimes)`$ columns. Here is a brief overview of the first few rows.
 
-Prepare dataset
-- shift columns (start by February)
-- add MonthName
-- add T
+```{r}
+
+head(crimes)
+
+```
+
+We make some preliminary modifications to the dataset to make it more suitable for analysis.
+
+- We treat the `Borough` column as a categorical variable to investigate whether patterns emerge based on different districts.
+- We add a `MonthName` column, a categorical version of the `Month` column, allowing us to treat the months in a non-linear manner.
+- From the perspective of predicting shootings, using the number of arrests in the same month can sometimes be trivial and unrealistic in a real-world scenario. Therefore, we modify the variables by using the number of arrests from the previous month as a predictor. This operation invalidates the first row of our dataset, January 1, 2006, which must be discarded.
+- We add a `T` column that represents the time elapsed in months from the first month of the dataset (February 2006). This helps model the temporal dependence of the observations. Additionally, we add two columns, `SinT` and `CosT`, representing the sine and cosine transformations of `T` with a periodicity of 12, useful for modeling seasonality.
+
+All these operations will also be performed in the two notebooks focusing on statistical analyses.
 
 
 ```{r}
 
-# Add discrete version for Month and Year
 prepare_out <- prepare_crimes(crimes_df=crimes, use_families=FALSE)
 crimes      <- prepare_out$df
 
 rm(prepare_out)
+
 ```
 
-
-View some rows and summary of the dataset.
+Let's take a brief look at the dataset after the aforementioned modifications.
 
 ```{r}
 
@@ -63,13 +74,16 @@ head(crimes, 25)
 
 ```
 
-Brief comment on the type of the data.
 
-### Train and Test split
+### 1.2. Train and Test split
 
-We split train and test across years. Explain CV setup. Cannot apply cross validation for time dependence.
-We only look at the train for exploration to simulate unseen data.
-The dataset covers r`length(unique(crimes$Year))` years, we use the last r`length(YEAR_TEST)` for the test: r`YEAR_TEST`.
+Before proceeding with the exploration, it is essential to adhere to the statistical and machine learning paradigm, which involves splitting the dataset into two parts: a training set and a test set. The test set simulates new, unseen data during the fitting phase and allows us to evaluate the model's performance on new data. 
+
+For this reason, the exploration will focus solely on the training set.
+
+Given the temporal nature of the data, the split cannot be arbitrary but must account for the intrinsic temporal dependencies of the observations. Therefore, the dataset will be divided into two parts based on the year of observation, using the last two years, 2022 and 2023, as the test set.
+
+The temporal dependency complicates the application of the cross-validation paradigm, which achieves a more robust result by dividing the dataset into folds and repeatedly performing the same analysis, rotating the fold considered as the test set. Although cross-validation theoretically allows for a more robust and comprehensive modeling, it is not applicable in this case due to the temporal dependence of the observations. Therefore, the entire statistical analysis will rely solely on the fixed split between the training and test sets.
 
 ```{r}
 
@@ -86,15 +100,15 @@ rm(split)
 
 ```
 
-Thus we have `r nrow(crimes)` for tran and `r nrow(crimes_test)` for test. 
+After performing the split, the training set contains $`r nrow(crimes)`$ rows, while the test set contains $`r nrow(crimes_test)`$ rows.
 
-## Visualizations
+## 2. Visualizations
 
-We start with brief visualization of the data to see if there are patterns in time and in the relationship between crimes and shootings.
+As a first step in data exploration, we will proceed with a series of visualizations that will provide an overview of the involved variables and their relationships.
 
-### Time series
+### 2.1. Time series
 
-We start by plotting the time series of the crimes and shootings over the years.
+First, let's visualize the time series of the variables involved, particularly how shootings and different types of crimes have varied over time and whether any interactions between them can be observed.
 
 ```{r}
 
@@ -113,15 +127,19 @@ plot_multiple_ts(
     lwd    = 0.7,
     ticks  = 7,
     colors = PALETTE$crimes,
-    legend.size = 15
+    legend.size = 13
 )
 
 ```
 
-Good for overview but better inspect each in deatail.
-Different scale and trend.
+This initial type of visualization provides an overview that can give a first idea of their magnitude variation:
 
-We plot each individual and visualize the time series for each borough.
+- There are crimes that are much more frequent, such as `MarijuanaPossession` and `SubstancePossesion`, which have seen a drastic decrease over the years. Others, like `Assault`, have maintained a more stable trend over time.
+- Some crimes show certain trends, such as `Theft`, which gradually increased starting in 2010 and then saw a decline from 2016. Another crime with a more erratic pattern is `Larceny`, which in 2014 appears to have experienced a rapid and drastic change in arrest numbers, followed by a reset in 2020.
+- Arrests for `WeaponsPossession` have a very low number of arrests, with many months registering no arrests for this crime.
+- Patterns of other crimes are harder to discern from this graph due to their smaller magnitude, including our target variable `Shootings`.
+
+In this regard, it makes sense to visualize each time series independently. Let's take this opportunity to visualize the same time series for the five different boroughs of New York, to appreciate if there are significant differences among them.
 
 ```{r fig.width=16, fig.height=12}
 
@@ -167,6 +185,10 @@ plot_in_grid <- function(plot_list, ncol = 1, title = "", title.size=15, height 
 }
 ```
 
+#### 2.1.1 Arrests
+
+Now let's examine the trends of the time series for different types of crimes.
+
 ```{r}
 
 ts_plots <- list()
@@ -203,9 +225,14 @@ rm(ts_plots)
 
 ```
 
-Some comments patterns of different patterns and variability.
+The plots reveal a noticeable trend for different types of crimes. While some types show more variability than others, most exhibit a declining trend starting from 2018.
 
-Let's better see the number compared with the shootings.
+Regarding the division among boroughs, the trend appears consistent but operates at different levels: Brooklyn and the Bronx tend to have higher crime rates compared to Queens and Manhattan. A notable exception is Staten Island, which appears to be an area with lower crime rates and shows little clear trend over time.
+
+#### 2.1.2 Shootings and Total Arrests
+
+Now let's visualize the time series for shootings, our response variable, and the total arrests that aggregate all the types of crimes seen previously.
+
 ```{r}
 
 ts_plots <- list()
@@ -219,11 +246,11 @@ for (crime_name in c("TotArrests", "Shootings")) {
         ),
         group  = "Borough",
         xlab   = "Year",
-        ylab   = ifelse(crime_name=="TotArrests", "Total Arrests", "Shootings Incidents"),
+        ylab   = ifelse(crime_name=="Shootings", "Shootings Incidents", "Total Arrests"),
         title  = paste(crime_name),
         lwd    = 0.6,
         colors = unlist(PALETTE$boroughs),
-        ticks  = 5,
+        ticks  = 8,
         legend = FALSE
     )
 
@@ -241,14 +268,16 @@ rm(ts_plots)
 
 ```
 
-Trend in TotArrests
+Arrests summarize somewhat what was seen previously, showing a declining trend starting from 2018 that remains consistent across all boroughs, albeit at different levels.
 
-Different comparison between arrests and shootings in terms of effect in boroughs.
+Shootings, on the other hand, appear to have a relatively stable trend with a dip in 2018 and a peak in 2020. Shootings seem similar between the Bronx and Brooklyn, as well as between Queens and Manhattan. Staten Island, however, remains an area with few shootings.
 
 
-### Scatterplots
+### 2.2 Scatterplots
 
-See scatterplots of time variabiles. Year and Month.
+Let's proceed with a second visualization using a scatter plot to better appreciate the relationships between the predictor variables for our prediction model and the response variable, which is the number of shootings.
+
+#### 2.2.1. Month and Year
 ```{r}
 
 BOROUGH_LEGEND <- extract_legend(
@@ -265,11 +294,11 @@ BOROUGH_LEGEND <- extract_legend(
 
 )
 
-scatterplots <- list()
+time_scatterplots <- list()
 
 # Plots
 for (time in c("Year", "Month")) {
-    scatterplots[[time]] <- levels_scatterplot(
+    time_scatterplots[[time]] <- levels_scatterplot(
         df_     = crimes,
         x       = time,
         y       = "Shootings",
@@ -287,30 +316,36 @@ for (time in c("Year", "Month")) {
 }
 
 plot_in_grid(
-    plot_list = scatterplots,
+    plot_list = time_scatterplots,
     ncol = 2,
     title = "Shootings in NYC over time",
     title.size = 20,
     height = 0.1
 )
 
-rm(scatterplots)
+rm(time_scatterplots)
 
 ```
 
-Trend in the year with drop in 2020.
-Seasonality with higher shootings in summer.
+Two trends emerge:
+
+* Regarding the `Year` predictor, the information observed aligns closely with the time series: there is a common trend across boroughs showing a decrease from 2010 to 2018, followed by a rise.
+* The scatter plot involving the `Month` shows a clear seasonal dependence, with a peak in shootings during the summer months and a more pronounced decline in February. Additionally, boroughs with higher numbers of shootings also exhibit greater variability.
+
+#### 2.2.2. Arrests
+
+Let's investigate the relationship between the number of arrests for a given crime and shootings.
 
 ```{r}
 
-scatterplots <- list()
+arrests_scatterplots <- list()
 
 # Plots
 for (i in 1:length(CRIME_NAMES)) {
 
     crime <- CRIME_NAMES[i]
 
-    scatterplots[[crime]] <- levels_scatterplot(
+    arrests_scatterplots[[crime]] <- levels_scatterplot(
         df_     = crimes,
         x       = crime,
         y       = "Shootings",
@@ -328,16 +363,30 @@ for (i in 1:length(CRIME_NAMES)) {
 }
 
 plot_in_grid(
-    plot_list = scatterplots,
+    plot_list = arrests_scatterplots,
     ncol = 4,
     title = "Crimes impact on shootings in NYC - 2006 to 2023"
 )
 
-rm(scatterplots)
+rm(arrests_scatterplots)
 
 ```
 
-Better inspect TotArrests
+The visualization provides interesting insights into understanding the different nature of crimes and their relationship with shootings:
+
+- In almost all cases, crimes tend to have a positive effect on the number of shootings.
+- Some relationships show a strong linear pattern, such as for crimes like `Assault`, `SubstancePossession`, and `MarijuanaPossession`.
+- Other relationships do not exhibit a clear relationship, as seen for `Burglary` or `Theft`.
+
+Confirming patterns observed in the time series analysis:
+- The crime of `Larceny` appears clustered into two distinct groups, reflecting the sudden change observed in the time series.
+- Arrests for `LicensingFirearm` remain a crime with very low arrest numbers and consequently limited observations.
+- The boroughs of Bronx and Brooklyn tend to interact with shootings in a similar manner, as do the boroughs of Queens and Manhattan.
+- Staten Island rarely shows a noticeable relationship with shootings, often forming a compact cluster of observations with few arrests and shootings.
+
+### 2.2.3. Total Arrests
+
+Now let's examine the relationship between the total arrests and shootings.
 
 ```{r}
 
@@ -357,24 +406,30 @@ levels_scatterplot(
     colors  = unlist(PALETTE$boroughs)
 )
 
-
 ```
 
-Remarks:
-- StatenInsland very few crimes and shootings
-- In general Bronx and Brooklyn tends to behave similar, and Queens and Manhattan tends to behave similar.
-- There's a decrease to 2020 and then raise
-- There seasonal effect at different scales
-- Most linear evidence: Assaults, Murder, Robbery
-- Possible Bi-cluster for larceny
-- Marijuana sell possession it's interesting but has initial outliers.
-- Quadratic effect for SubstancePossession, WeaponPossesion and TotArrests
+The plot confirms how the borough of Staten Island forms a compact cluster, indicating an area of the city with low crime rates in terms of both arrests and shootings.
 
-## TODO Find name to this sections
+Looking at the other four boroughs, each appears to delineate a quadratic relationship between the total number of arrests and shootings: shootings tend to be higher when the number of arrests is very low, decrease as the number of arrests begins to increase, and then increase again as the number of arrests further increases.
 
-### StatenInsland
+This pattern is interesting because it suggests that compared to an average number of arrests, shootings tend to increase when there are few arrests and decrease when there are many. It's important to note that situations with few arrests and many shootings still have a limited number of observations. Intuitively, this could be explained by the fact that low police control and therefore few arrests may facilitate shootings due to lower deterrence. Conversely, increased crime rates may require a more intensive police response, resulting in more arrests.
 
-Borough few criminalty treated differently from the others
+## 3. Interventions on data
+
+The previous visualizations highlighted some elements that could be problematic for modeling. Therefore, we propose to analyze these elements in more detail in order to manage them appropriately.
+
+### 3.1. Staten Insland Borough
+
+Both the time series and scatterplots revealed that the Borough of Staten Island is an area of New York City with a low crime rate and is generally uncorrelated with other zones. 
+This can be partly attributed to its geographical distance from the other four Boroughs.
+
+```{r chicago regions, fig.cap="NYC Boroighs", out.width = "370px"}
+knitr::include_graphics("./data/boroughs.png")
+```
+
+For this reason, it is better to model Staten Island separately from the other Boroughs in order to capture its unique characteristics. 
+Let's first analyze the summary statistics for Staten Island Borough alone.
+
 
 ```{r}
 
@@ -389,57 +444,24 @@ rm(split_out)
 
 ```
 
-
-See info about Crimes
-
 ```{r}
 summary(si_crimes)
 ```
 
+The data confirm what was previously indicated by the visualizations, with the number of shootings and arrests tending to be very low.
+
+In summary, the highlighted data are sufficient to justify modeling the Borough of Staten Island separately.
+
+
+### 3.2. Outliers
+
+A potential issue that could arise during modeling is the presence of noisy data points, i.e., observations that significantly deviate from the distribution of other observations and could negatively affect the model. Since we are dealing with time series, we cannot simply eliminate outliers, but need a more sophisticated strategy: once identified, we can proceed to transform them to align more closely with the expected distribution, thereby reducing their modeling impact.
+
+To achieve this, we utilize Time Series Analysis techniques that decompose the time series into trend, seasonality, and residuals, and identify outliers in the residuals with particularly high or low values. These values are updated through linear interpolation between the preceding and following values.
+
+Let's visualize the proposed changes for the time series concerning shootings.
 
 ```{r}
-
-df_group_stats(si_crimes, "Year", "Shootings")
-
-knit_table((df_group_stats(si_crimes, "Year", "Shootings")))
-```
-
-Month 
-```{r}
-knit_table(df_group_stats(si_crimes, "MonthName", "Shootings"))
-```
-
-Very few variation
-
-
-### Outliers
-
-Outliers substitution
-
-```{r}
-plot_multiple_ts(
-    df_ts = ts_borough_reshape(
-        df_ = crimes[, c("Borough", "Year", "MonthName", "Shootings")],
-        crime_type = "Shootings"
-    ),
-    group = "Borough",
-    xlab = "Year",
-    ylab = "Incidents",
-    title = paste("Shootings in NYC"),
-    lwd = 0.7,
-    colors = unlist(PALETTE$boroughs)
-)
-```
-
-Particulary problematic with picks.
-
-Use tso - expalin
-
-Let's see if they can be detected
-
-```{r}
-
-AAAA
 
 palette_outlier <- PALETTE$outliers
 
@@ -472,10 +494,13 @@ for(y in c("Shootings", CRIME_NAMES)) {
     }
 
     if(y == "Shootings") {
-        plot_in_grid(
-            plot_list = outliers_plots,
+        grid.arrange(
+            grobs = outliers_plots,
             ncol = 2,
-            title = paste(y, "outliers"),
+            top = textGrob(
+                paste(y, "outliers detection"), 
+                gp = gpar(fontsize = 14, fontface = "bold")
+            )
         )
     }
     
@@ -484,45 +509,61 @@ for(y in c("Shootings", CRIME_NAMES)) {
 
 crimes$TotArrests <- rowSums(crimes[, CRIME_NAMES], na.rm = TRUE)
 
-
 ```
 
-Only two observations.
-https://www.nytimes.com/2020/09/02/nyregion/nyc-shootings-murders.html
+For what concerns shootings, the two outliers found refer to the summer of 2020 in Brooklyn. According to news reports, the summer of 2020 was particularly violent in New York City, with a spike in shootings and homicides. More information can be found in this [NYC article](https://www.nytimes.com/2020/09/02/nyregion/nyc-shootings-murders.html). Therefore, these two outliers are justified by the unique circumstances of that year.
 
-Here new data
+### 3.3. Larceny clusters
 
+An emerging pattern that warrants further investigation is the dual nature of larceny crimes. Let's see if the two clusters observed in the scatterplot reflect the sudden trend change that occurred in 2014.
 
-
-
-
-### Larceny clusters
-
-Isseu with Larceny that had a step time series and two clusters
 ```{r}
 
-levels_scatterplot(
-    df_     = crimes,
-    x       = "Larceny",
-    y       = "Shootings",
-    xlab    = "Larceny",
-    ylab    = "Shootings",
-    levels  = "Borough",
-    title   = "Larceny in NYC over years",
-    title_size = 16,
-    jitter_ = TRUE,
-    ticks   = 10,
-    shape   = 19,
-    size    = 2,
-    colors  = unlist(PALETTE$boroughs)
+plot_in_grid(
+    list(
+        "ts" <- plot_multiple_ts(
+            df_ts = ts_borough_reshape(
+                df_ = crimes[, c("Borough", "Year", "MonthName", "Larceny")],
+                crime_type = "Larceny"
+            ),
+            group  = "Borough",
+            xlab   = "Year",
+            ylab   = "Arrests",
+            title  = "Larceny in NYC - 2006 to 2021",
+            lwd    = 0.6,
+            colors = unlist(PALETTE$boroughs),
+            ticks  = 8,
+            legend = FALSE
+        ),
+        "scatter" <- levels_scatterplot(
+            df_     = crimes,
+            x       = "Larceny",
+            y       = "Shootings",
+            xlab    = "Larceny",
+            ylab    = "Shootings incidents",
+            levels  = "Borough",
+            title   = "Larceny arrests and Shootings",
+            title_size = 16,
+            jitter_ = TRUE,
+            ticks   = 10,
+            shape   = 19,
+            size    = 2,
+            legend  = FALSE,
+            colors  = unlist(PALETTE$boroughs)
+        )
+    ),
+    ncol = 2,
+    height = 0.1
 )
+
+
 ```
 
-Divide in two areas
+This sudden change suggests not only a spike in larceny crimes but also possibly a different bureaucratic policy for recording this type of crime. The nature of the arrests clearly exhibits two distinct periods, which can be particularly problematic if this distinction is not explicitly addressed. 
+The most effective example is Simpson's paradox, where two clusters positively correlated with the predictor produce a contrary effect if not correctly identified, as illustrated for the Borough of Bronx.
 
 ```{r}
 
-larceny_plots <- list()
 for(level in levels(crimes$Borough)) {
 
     df_level <- crimes[crimes$Borough == level, ]
@@ -530,47 +571,17 @@ for(level in levels(crimes$Borough)) {
         df_level$Year %in% 2014:2019, "A", "B"
     ))
 
-    larceny_plots[[level]] <- levels_scatterplot(
-        df_     = df_level,
-        x       = "Larceny",
-        y       = "Shootings",
-        xlab    = "Larceny",
-        ylab    = "Shootings",
-        levels  = "Period",
-        title   = paste("Larceny - ", level),
-        title_size = 12,
-        jitter_ = TRUE,
-        ticks   = 10,
-        shape   = 19,
-        size    = 1.5,
-        colors  = c("#153283", "#ff7300"),
-        legend = FALSE
-    )
     
 }
 
-grid.arrange(
-    grobs = larceny_plots,
-    ncol = 2
-)
-
-rm(larceny_plots)
-
-```
-
-Problem for simpson paradox 
-
-```{r}
 df_level <- crimes[crimes$Borough == "Bronx", ]
 df_level$Period <- as.factor(ifelse(
     df_level$Year %in% 2014:2019, "A", "B"
 ))
 
 fit1 <- lm(Shootings ~ Larceny, data = df_level)
-coefficients(fit1)
 
 fit2 <- lm(Shootings ~ Larceny + Period, data = df_level)
-coefficients(fit2)
 
 grid.arrange(
     grobs = list(
@@ -578,6 +589,7 @@ grid.arrange(
             df_=df_level,
             model=fit1,
             points_size = 2,
+            col = "#133591", col_points = "#153283",
             xlab = "Larceny arrests", ylab = "Shootings incidents",
             x="Larceny", y="Shootings"
         ),
@@ -598,18 +610,22 @@ grid.arrange(
     )
 )
 
-rm(list = c("fit1", "fit2", "df_level"))
+rm(fit1, fit2, df_level)
 
 
 ```
 
-Difficult to treat, we probaly not use it becuase it needs for sophisticathed version.
+Despite the sudden change appearing to have stabilized in the time series, handling such phenomena with unseen data requires a delicate approach. The example previously mentioned, like Simpson's paradox, places this predictor in a particularly precarious position in statistical applications such as stepwise regression or LASSO, where forcing interaction between predictors is not feasible.
 
-### Crimes correlation
+For this reason, we prefer to exclude this predictor from the prediction model.
 
-Investigate collinearity by fitting the full model.
+## 4. Crimes multicollienarity
 
-See effects wich we expect to be positive
+Particular importance during modeling should be given to the multicollinearity of predictors. Reflecting a unique condition of the city and often involving overlapping areas of crime that may influence each other, it is necessary to delve into and quantify their degree of correlation.
+
+### 4.1. Variance Inflation Factor
+
+To achieve this, we use the Variance Inflation Factor (VIF), an index that measures the degree of multicollinearity among predictors in a model. We then fit a model that includes all arrests for different crimes as predictors (note that we must exclude the total number of crimes from these, as it is perfectly explained and makes the correlation matrix singular).
 
 ```{r}
 
@@ -619,28 +635,28 @@ full_model <- lm(
 )
 
 summary(full_model)
+```
+
+Most of the predictors are significant, but the signs of the coefficients are both positive and negative. Let's analyze the effects that the predictors have on the response variable.
+
+```{r}
 
 plot(allEffects(full_model))
 ```
 
-Lot of negative, meaning that there'is collinearity.
-
-We can also appreaciate problemsn with variability for some crimes, indicating the absence of datapoints for certain ranges of observations, (LicensingFirearm, Weapon Possession)
+Excluding Larceny, which we know has an anomalous nature, we would expect the other predictors to have a positive effect on the number of shootings. However, this is not always observed in the visualization, which may indicate possible multicollinearity among the predictors. Let's formally verify this using the VIF.
 
 ```{r}
-vif_diagnostic(full_model) 
+invisible(vif_diagnostic(full_model) )
 
 rm(full_model)
 ```
 
-Strong avidence for certain predictors
+The VIF confirms what was already suspected, namely that there is some multicollinearity among the predictors under examination.
 
-We now all are positive correlated, negative correlation synyomatic of collinearity. 
-Also VIF index says is. Dangerous for model fitting and automatic seleciton.
+### 4.2. Correlation Matrix
 
-Let's better inspect if we can find family of crimes.
-
-There is strong evidence. 
+Another piece of information we can use to better understand the interactions among predictors is the correlation matrix among them.
 
 ```{r}
 plot_correlation_matrix(
@@ -649,9 +665,15 @@ plot_correlation_matrix(
 )
 ```
 
-### Aggregating crime families
+Excluding arrests for larceny, which we know are particularly problematic, arrests for homicide show a negative correlation with most other crimes, but not with shootings. 
 
-Plot scatterplots of involved ones.
+It is evident, however, that for some groups of crimes, the correlation is very strong, such as between `Assault` and `WeaponPossession`, or between `MarijuanaPossession` and `SubstancePossession`.
+
+
+### 4.3 Collinear scatterplots
+
+ALet's analyze in more detail the relationship among predictors with a VIF greater than 2.5.
+
 
 ```{r}
 COLLINEAR <- c(
@@ -666,11 +688,33 @@ COLLINEAR <- c(
 plot(crimes[, COLLINEAR])
 ```
 
+The plot shows the clear linear relationship among predictors, which is necessarily problematic for modeling. To address this issue, we can aggregate predictors into groups of crimes to reduce the number of predictors and their collinearity. Of particular interest here is the observation that MarijuanaPossession and SubstancePossession exhibit a cloud of points, indicating a specific Borough that appears to be distinct from the center of mass in both cases.
+
+### 4.4 Principal Component Analysis
+
+Another technique that can help us understand the structure of the data is Principal Component Analysis (PCA), which allows us to reduce the dimensionality of the data and visualize relationships among predictors in a two-dimensional plane.
+
+#### 4.4.1 Explained variance
+
+The first two principal components cumulatively explain approximately $85\%$ of the total variance in the data.
+```{r fig.width = 8, fig.height = 6}
+
+pca_analysis(
+    df_          = crimes,
+    features     = c(CRIME_NAMES, "Shootings"),
+    levels       = "Borough",
+    vars         = FALSE,
+    individual   = FALSE,
+    biplot       = FALSE
+)
+
+```
 
 
-#### Principal Component Analysis
+#### 4.4.2 Variables
 
-Let's see PCA variablity for different boroughs.
+The visualization of crimes provides an insight into the contribution of a specific predictor, which is slightly lower for some predictors, especially for Theft, but overall balanced.
+Moreover, it is possible to notice how most of the predictors known to have collinearity issues tend to distribute along the positive direction of the first component. It is important to note that along with them, there is also the variable Shootings, our response variable.
 
 ```{r fig.width = 8, fig.height = 6}
 
@@ -678,67 +722,66 @@ pca_analysis(
     df_          = crimes,
     features     = c(CRIME_NAMES, "Shootings"),
     levels       = "Borough",
+    explained    = FALSE,
     individual   = FALSE,
-    biplot_title = "PCA - Crimes in NYC",
-    individuals  = "Boroughs - PCA",
-    variables    = "Crimes - PCA",
+    biplot       = FALSE,
+    variables    = "Crimes arrests - PCA",
 )
-```
-
-Most of collnear in Brooklyn and Bronx
-
-Assaults and Weapon possession along with shootings (and also mischief).
-
-Marijuana and Substance Possession
-
-Queens a part.
-
-
-#### Domain knowledge
-
-* **Assault** - An intentional act of causing physical injury to another person, including various degrees of assault such as third-degree assault, assault on a peace officer, and unclassified assault.
-
-* **Burglary** - The unlawful entry into a building or residential or commercial area with the intent to commit a crime, including burglary in a residence at night, burglary in a commercial area during the day, and unclassified burglary.
-
-* **Drug Paraphernalia** - The possession, sale, or distribution of tools used for the consumption, production, or sale of narcotics, including various degrees of possession and sale of such paraphernalia.
-
-* **Larceny** - The unlawful taking of another person's property with the intent to permanently deprive the owner of their possessions, including petit larceny from open areas, grand larceny of auto, larceny by extortion, and theft of credit cards.
-
-* **Licensing Firearm** - The possession, use, or distribution of firearms without the necessary license or in violation of firearm licensing laws, including criminal disposal of firearms.
-
-* **Marijuana Possession** - The unlawful possession, sale, or distribution of marijuana, including various degrees of possession and sale of marijuana and the unlawful sale of synthetic marijuana.
-
-* **Mischief** - The intentional destruction or damage to another person's property, including various degrees of criminal mischief, graffiti, damage to motor vehicles, and damage by fire or explosives.
-
-* **Murder** - The intentional and unlawful killing of another person, including unclassified murder.
-
-* **Robbery** - The use of force or threat of force to take property from another person, including robbery in open areas, carjacking, and robbery at gas stations.
-
-* **Substance Possession** - The unlawful possession, sale, or distribution of controlled substances, including various degrees of possession, sale, and intent to sell controlled substances.
-
-* **Theft** - The unlawful use of services without due payment, including theft of cable TV services and unclassified related offenses.
-
-* **Weapon Possession** - The unlawful possession, use, or distribution of weapons, including various degrees of weapon possession, manufacturing and transportation of weapons, and prohibited use of weapons, including imitation pistols.
-
-
-```{r}
-CRIME_FAMILIES <- list(
-    "Offense"  = c("Assault", "Mischief", "Robbery"),
-    "DrugRelated"     = c("MarijuanaPossession", "SubstancePossession", "DrugParaphernalia"),
-    "Drop"     = c("Larceny", "WeaponPossession")
-)
-
-CRIME_NAMES
 
 ```
 
+
+#### 4.4.3 Biplot
+
+Finally, the biplot accompanies the visualization of variables with that of observations, showing how different Boroughs are distributed along the two principal components.
+Queens Borough is the one that deviates most from the others, while most crimes tend to align in the direction of Manhattan, particularly the collinear predictors.
+The visualization also partially confirms similarities between pairs of Boroughs: Brooklyn and Bronx, Manhattan and Queens.
+
+```{r fig.width = 8, fig.height = 6}
+
+pca_analysis(
+    df_          = crimes,
+    features     = c(CRIME_NAMES, "Shootings"),
+    levels       = "Borough",
+    explained    = FALSE,
+    vars         = FALSE,
+    individual   = FALSE,
+    biplot_title = "PCA - Crimes in NYC"
+)
+```
+
+
+### 4.5 Domain knowledge
+
+One last interesting aspect to understand the interaction between predictors is certainly to consider the nature of crimes and how they may influence each other. Let's therefore look at the definitions of the crimes.
+
+
+| Crime                   | Description                                                                                                              |
+|-------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| Assault                 | An intentional act of causing physical injury to another person, including various degrees of assault                    |
+| Burglary                | The unlawful entry into a building or residential or commercial area with the intent to commit a crime                   |
+| Drug Paraphernalia      | The possession, sale, or distribution of tools used for the consumption, production, or sale of narcotics                |
+| Larceny                 | The unlawful taking of another person's property with the intent to permanently deprive the owner of their possessions   |
+| Licensing Firearm       | The possession, use, or distribution of firearms without the necessary license or in violation of firearm licensing laws |
+| Marijuana Possession    | The unlawful possession, sale, or distribution of marijuana                                                              |
+| Mischief                | The intentional destruction or damage to another person's property                                                       |
+| Murder                  | The intentional and unlawful killing of another person                                                                   |
+| Robbery                 | The use of force or threat of force to take property from another person                                                 |
+| Substance Possession    | The unlawful possession, sale, or distribution of controlled substances                                                  |
+| Theft                   | The unlawful use of services without due payment                                                                         |
+| Weapon Possession       | The unlawful possession, use, or distribution of weapons                                                                 |
+
+
+#### 4.6 Aggregating families
+
+Based on what has emerged, we decide to aggregate the following crimes by summing their arrests:
+
+- `ViolenceAndDisruption` will collectively represent Assault, Mischief, and Robbery, which we know from the scatterplot are particularly linearly correlated with each other.
+- `DrugRelated` will combine MarijuanaPossession, SubstancePossession, and DrugParaphernalia, all closely related to drug sale and possession.
+- We will remove the feature `Larceny`, as discussed earlier, and also `WeaponPossession`, as it is closely related and can be explained in terms of arrests for `Assault` and `Robbery`.
+
+
 ```{r}
-
-# crimes_old         <- crimes
-# CRIME_NAMES_old <- CRIME_NAMES
-
-crimes <- crimes_old
-CRIME_NAMES <- CRIME_NAMES_old
 
 for(fam_name in names(CRIME_FAMILIES)) {
 
@@ -763,18 +806,13 @@ crimes$Drop <- NULL
 CRIME_NAMES <- CRIME_NAMES[!CRIME_NAMES %in% "Drop"]
 ```
 
-### Redo
-
-
-
+Una volta performata questa aggregazione, ricalcoliamo il VIF per verificare che la collinearità sia stata ridotta.
 ```{r}
-
 
 full_model <- lm(
     Shootings ~ .,
     data = crimes[, c("Shootings", CRIME_NAMES)]
 )
-
 
 vif_diagnostic(full_model) 
 
@@ -782,16 +820,17 @@ rm(full_model)
 
 ```
 
-```{r}
-plot_correlation_matrix(
-    df = crimes[, c("Shootings", "TotArrests", CRIME_NAMES)],
-    title = "NYC Crimes arrests correlation"
-)
-```
+Multicollinearity has been significantly reduced, although as expected, crimes related to assault and drug-related offenses remain correlated, belonging to distinct crime categories in terms of interpretation preference.
 
-### Boroughs
 
-Let's see the borough effect on the shootings.
+## 5. Boroughs and time
+
+Finally, let's investigate the relationship between predictors related to spatial and temporal conditions, namely Borough, month, and year.
+
+### 5.1. Boroughs
+
+From the boxplot, it can be observed a similarity between Manhattan and Queens, and how the areas of Brooklyn and Bronx, where there are more shootings, also exhibit greater variability.
+
 
 ```{r}
 
@@ -801,7 +840,10 @@ plot_boxplot(
 )
 ```
 
-Clearly different crimilanilties
+
+### 5.2. Year
+
+Regarding the year, a trend can be observed leading to a downturn in 2018 followed by a rise from 2020 onwards. Similar to the Boroughs, a higher number of shootings corresponds to greater variability.
 
 ```{r}
 crimes$Year <- as.factor(crimes$Year)
@@ -812,7 +854,11 @@ plot_boxplot(
 crimes$Year <- as.numeric(crimes$Year) + 2005
 ```
 
-There's a seasonal effect, also variability involved
+
+### 5.3. Month
+
+The boxplot highlights a clear seasonal effect, with crimes tending to be higher in the summer months and lower in the winter months, with a notable dip in February. Once again, a higher number of shootings corresponds to greater variability.
+
 
 ```{r}
 plot_boxplot(
@@ -822,5 +868,14 @@ plot_boxplot(
 
 ```
 
-There's a slight trend
+
+## 6. Conclusion
+
+This report has allowed for better data engineering in preparation for analysis. We have learned that:
+
+- Boroughs reflect a similar pattern of criminality but occur at different scales.
+- There is a trend over the years for shootings.
+- Seasonality is significant.
+- Crime families are connected in different ways with shootings; notably, ViolenceAndDisruption and DrugRelated show some degree of collinearity.
+- The interaction between shootings and the total number of arrests exhibits a quadratic effect, where shootings tend to increase with either very few or very many arrests.
 

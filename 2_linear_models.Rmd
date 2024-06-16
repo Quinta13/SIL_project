@@ -1,7 +1,6 @@
 ---
-title: "NYC Shootings and Arrests - Linear Models"
+title: "NYC Shootings incidents and Criminality <br> Linear models"
 author: "Sebastiano Quintavale - 878500"
-date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
     html_document:
         toc: true
@@ -10,13 +9,23 @@ output:
         highlight: tango
 ---
 
+## 1. Introduction
+
+The purpose of this notebook is to conduct a statistical analysis on data related to shooting incidents in New York City. Specifically, it aims to study the temporal trends of these incidents and to understand the influence of the number of arrests for different types of crimes on these incidents.
+
+Although this type of problem lends itself to being addressed with statistical tools explicitly designed for count data, the intent of this notebook is to initially approach the problem with simpler linear models.
+
+This initial attempt will provide a clearer understanding of the problem and the predictive power of the variables involved. It will also highlight the issues and limitations of such models, thus justifying the transition to more appropriate, complex models, which are discussed in the notebook [3_counting_models.Rmd](3_counting_models.Rmd).
+
+The analysis will be conducted in two parts. The first part will focus on data related to shooting incidents in the Staten Island borough, which, as noted, needs to be modeled separately. The second part will cover the entire city of New York, including the boroughs of Brooklyn, Bronx, Manhattan, and Queens.
+
+
 ```{r echo=FALSE, include=FALSE}
 
-# 1. RMardown styling
 knitr::opts_chunk$set(echo=FALSE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
 knitr::opts_chunk$set(fig.width = 12, fig.height = 8)
 
-# 2. Project environment setup
 source("src/init.R")
 
 ```
@@ -32,13 +41,10 @@ prepare_out <- prepare_crimes(crimes_df=crimes)
 crimes      <- prepare_out$df
 CRIME_NAMES <- prepare_out$crime_names
 
-rm(prepare_out)
-
 # Split Train and Test
-split <- train_test_split_by_year(df_ = crimes, year_test = YEAR_TEST)
-crimes <- split$train
+split       <- train_test_split_by_year(df_ = crimes, year_test = YEAR_TEST)
+crimes      <- split$train
 crimes_test <- split$test
-rm(split)
 
 split_out <- split_statenisland(crimes=crimes, crimes_test=crimes_test)
 
@@ -47,55 +53,71 @@ crimes_test    <- split_out$crimes_test
 si_crimes      <- split_out$si_crimes
 si_crimes_test <- split_out$si_crimes_test
 
-rm(split_out)
-
-
+rm(prepare_out, split, split_out)
 
 crimes <- prepare_outliers(crimes)
 
 ```
 
 
-## Staten Island
+## 2. Staten Island
+
+We begin by considering the Staten Island borough, an area of the metropolis characterized by very low crime rates, both in terms of shootings and arrests.
+
+### 2.1. Shootings overview
+
+Let's analyze the data related to shooting incidents in Staten Island. First, a brief statistical summary of the monthly observations of the number of shootings.
 
 ```{r}
 
-plot(si_crimes)
+summary(si_crimes$Shootings)
 
 ```
 
-### Overview
+In general, it can be observed that the number of shootings is very low, with an average of $`r round(mean(si_crimes$Shootings))`$ incidents per month and a median of $`r round(median(si_crimes$Shootings))`$. The maximum number of incidents in a single month over the entire period considered is just $`r max(si_crimes$Shootings)`$.
 
-Average per year
+More specifically, we can see how the number of shootings is distributed across different years and months.
+
+Shootings by year.
+
 
 ```{r}
 knit_table(round(t(df_group_stats(si_crimes, "Year", "Shootings")), 3))
 ```
 
-Month 
+Shootings by month.
+
 ```{r}
 knit_table(round(t(df_group_stats(si_crimes, "MonthName", "Shootings")), 3))
 ```
 
+Although a slight trend over the years and some seasonality can be observed, these involve a very low magnitude of shootings, with only one or two shooting incidents.
 
-### Time series Decomposition
 
-Ts with average
+### 2.2 Time series STL decomposition
+
+More detailed information can be obtained through the decomposition of the time series. This allows us to see how the series can be broken down into a trend component, a seasonal component, and a residual component.
+
+Let's plot the original time series along with its mean.
+
+
 ```{r}
 plot_ts(
-    df_ts = ts_crimes_reshape(si_crimes),
+    df_ts = ts_crimes_reshape(si_crimes[,
+        c("Year", "MonthName", "Shootings")
+    ]),
     group = "CrimeType",
     y     = "Shootings",
     ylab  = "Shootings",
     title = "Shootings in StatenIsland",
     title.size = 18,
     lwd   = 0.7,
-    col   = "#030a35"
+    col   = "#000314"
 ) +
-    geom_hline(yintercept = mean(si_crimes$Shootings), linetype = "dashed", color = "#e24000df", linewidth = 1.5)
+    geom_hline(yintercept = mean(si_crimes$Shootings), linetype = "dashed", color = "#db1406df", linewidth = 1.)
 ```
 
-Decomposition
+Let's then visualize the decomposition of the time series into its three components.
 
 ```{r}
 plot_ts_stl_decomposition(
@@ -105,33 +127,45 @@ plot_ts_stl_decomposition(
 )
 ```
 
+As partially anticipated by the yearly and monthly averages, the series exhibits a seasonal component and a certain trend, but these contribute to a relatively low number of observations, between 2 and 3. Most of the decomposition lies in the residuals, error components that are not explainable but contribute to the majority of the observations under examination.
+
+This result partially foreshadows the difficulty of modeling a phenomenon with a reduced magnitude where the erratic component predominates.
+
+### 2.3 Linear models
+
+Let's start modeling the number of shootings in Staten Island using linear models.
+
 ```{r}
-# Linear models
+
 si_models <- list()
+
 ```
 
-### Null model
+#### 2.3.1 Baseline
+
+First, we use the model with only the intercept, which predicts that the number of shootings is always equal to the mean. This model will serve as a baseline for comparison with subsequent models.
+
 
 ```{r}
 
 # Null model predicting the mean level
-si_models$null <- lm(Shootings ~ 1, data = si_crimes)
+si_models$baseline <- lm(Shootings ~ 1, data = si_crimes)
 
 lm_diagnostic(
-    si_models$null, 
-    residuals = FALSE, 
-    effects   = FALSE,
-    vif       = FALSE
+    si_models$baseline, name = "Baseline"
 )
 
-si_crimes[c(9, 42), c("Year", "Month", "Shootings")]
 ```
 
-High number
 
-### Month model
+#### 2.3.2. Monthly seasonality
+
+Next, we model the monthly seasonality of shootings in Staten Island by including months as predictors. We use the discrete predictor `MonthName` to model the monthly seasonality.
+
+To do this, we do not assume any level as a baseline but use a contrast that centers the predictors around 0. This way, the coefficient of the predictor represents the difference from the mean.
 
 ```{r}
+
 # Using month levels with constraints they sum up to 0
 contrasts(si_crimes     $MonthName) <- contr.sum(12)
 contrasts(si_crimes_test$MonthName) <- contr.sum(12)
@@ -143,13 +177,19 @@ si_models$month <- lm(
 
 lm_diagnostic(
     si_models$month, 
-    influencial_points = FALSE,
-    effects = FALSE,
-    vif = FALSE
+    residuals = TRUE,
+    qq = TRUE,
+    name = "Month Seasonality"
 )
 ```
 
-We plot coefficients for the month with respect to the average number of shootings r`mean(si_crimes$Shootings)`.
+The model explains approximately 11% of the variance, with a corrected R^2 that decreases to $`r round(summary(si_models$month)$adj.r.squared, 3)`$ due to the use of 12 predictors, one for each month, most of which are not statistically significant—meaning they do not significantly deviate from the annual mean. 
+
+The only three significant predictors, along with the intercept, are February, May, and July, representing the months with the negative peak and two positive peaks of shootings throughout the year.
+
+The residual plot is not entirely satisfactory, showing underestimation in the first six months and overestimation in the remaining six. However, the qq-plot is reasonably satisfactory except for a few points in the tails.
+
+Let's plot the predicted coefficients from the model.
 
 ```{r}
 plot_model_coefficients(
@@ -161,10 +201,26 @@ plot_model_coefficients(
 
 ```
 
-Only significant are the rwo month more distant to the mean, Feb in negative and july in postiive, the seasonal effect has impact on just one number of shootings as shown in the stl decomposition.
+As we can see, the only significant coefficients are for the months of sharp decline and peak, which deviate from the mean by more than 1 unit and thus predict one shooting more or less than the mean.
 
 
-### Crimes models
+#### 2.3.3. Drug Related arrests
+
+Now let's see if the number of arrests for a particular crime can influence the number of shootings. Let's visualize the interaction between these variables to proceed with modeling.
+
+```{r}
+plot(si_crimes[, c("Shootings", "TotArrests", CRIME_NAMES)])
+```
+
+Although it's difficult to discern a clear relationship, we use the number of arrests for drug-related crimes (`DrugRelated`) as a predictor, which appears to hint at a potential correlation. First, let's visualize a statistical summary of the predictor.
+```{r}
+
+summary(si_crimes$DrugRelated)
+
+```
+
+Let's proceed to fit a linear model with the predictor `DrugRelated`.
+
 ```{r}
 
 si_models$crimes <- lm(
@@ -174,62 +230,143 @@ si_models$crimes <- lm(
 
 lm_diagnostic(
     si_models$crimes,
-    influencial_points = TRUE,
-    effects = TRUE,
-    vif   = FALSE
+    cook_dist = TRUE, 
+    qq = TRUE,
+    name = "DrugRelated model"
 )
 ```
 
-All significative. Similar adjusted R^2
-Vif no multicollineratiy
+The qq plot is not entirely satisfactory as it tends to deviate in the tails. However, the Cook's distance plot highlights two leverage points that could be problematic.
 
-### Step wise regression
 
 ```{r}
+si_crimes[c(28, 174), c("Year", "MonthName", "DrugRelated", "Shootings")]
+```
+
+The two problematic observations represent, respectively, a very high number of shootings accompanied by a very low and high number of drug-related arrests, which are unusual points in the data distribution.
+
+Although the predictor associated with `DrugRelated` is significant, we proceed by adding a quadratic effect to the model for this reason.
+
+```{r}
+
+si_models$crimes2 <- lm(
+    Shootings ~ DrugRelated + I(DrugRelated^2),
+    data = si_crimes
+)
+
+lm_diagnostic(
+    si_models$crimes2
+)
+```
+
+L'effetto quadratico non sembra però portare alcun vantaggio al modello, anzi il modello sembra peggiorare con nessun predittore ora significativo.
+
+
+#### 2.3.4. Stepwise regression
+
+Now let's proceed with automatic predictor selection using stepwise regression and visualize the trend of adjusted R^2, AIC, and BIC metrics as the number of predictors varies, identifying the optimal number of predictors. (Note: among the candidate predictors, we exclude `TotArrests`, designed as perfectly collinear with all other crimes).
+
+```{r}
+
 # Select the best model using step subset selection leaps library
 subset_regression_info(
     subset_reg = regsubsets(
-        Shootings ~ . - Year - TotArrests - Month,
-        data = si_crimes,
-        nvmax = 21
-    )
+        Shootings ~ .,
+        data = si_crimes[, c("Shootings", "MonthName", "T", CRIME_NAMES)],
+        nvmax = 1 + length(levels(si_crimes$MonthName)) + length(CRIME_NAMES),
+    ),
+    title = "Staten Island"
 )
 ```
 
-We seelect the number of variables selected by BIC.
+The optimal number of parameters varies significantly across the three metrics. BIC, which tends to be more stringent, favors just one parameter, while AIC achieves its best score with 7 parameters.
 
-Use two crimes plus the two months that have higher lowest value.
+It's interesting to note that the first two selected predictors are dummy variables for the months of February and July, which we know distinguish just one shooting more or less compared to the mean. The third predictor is `DrugRelated`, chosen as the most influential crime in the previous model.
+
+Let's proceed with the selected model using the number of parameters identified by both AIC and BIC.
+
+According to AIC, the predictors include `DrugRelated`, `ViolenceAndDisruption`, `Murder`, and the months of February, March, May, and July.
 
 ```{r}
 
 # Select the regsubsets model with 4 predictors
-si_models$stepwise <- lm(
-    Shootings ~ DrugRelated + Offense + Murder +
+si_models$stepwiseAIC <- lm(
+    Shootings ~ DrugRelated + ViolenceAndDisruption + Murder +
+        as.numeric(MonthName == "Feb") +
+        as.numeric(MonthName == "Mar") +
+        as.numeric(MonthName == "May") +
+        as.numeric(MonthName == "Jul"),
+    data = si_crimes
+)
+
+lm_diagnostic(
+    si_models$stepwiseAIC,
+    residuals = TRUE,
+    qq = TRUE,
+    name = "Stepwise - AIC"
+)
+
+```
+
+The only predictor that is not significant is the month of May, while all three predictors related to arrests for crimes are significant. However, it's important to note that the coefficient associated with `ViolenceAndDisruption` is negative, indicating a probable collinearity issue.
+
+Although the QQ plot shows some deviations in the tails, it is more satisfactory than the previous ones. The residuals for `DrugRelated` and `ViolenceAndDisruption` exhibit a slight quadratic trend, with underestimations occurring both when there are few or many arrests.
+
+
+```{r}
+vif_diagnostic(si_models$stepwiseAIC)
+```
+
+The VIF index indeed indicates that arrests for `DrugRelated` and `ViolenceAndDisruption` are multicollinear.
+
+Now let's examine the model selected by BIC, which effectively combines the two previously fitted models but only includes the significant months.
+
+```{r}
+si_models$stepwiseBIC <- lm(
+    Shootings ~ DrugRelated +
         as.numeric(MonthName == "Feb") +
         as.numeric(MonthName == "Jul"),
     data = si_crimes
 )
 
 lm_diagnostic(
-    si_models$stepwise,
-    effects = FALSE,
-    influencial_points = FALSE
+    si_models$stepwiseBIC,
+    residuals = TRUE,
+    qq = TRUE,
+    name = "Stepwise - BIC"
 )
 
 ```
 
-### Model comparison
+The model behaves similarly to the two models that separately modeled months and arrests, but overall improves the model quality in terms of R^2.
 
-### Prediciton plots
 
-Train
+### 2.4 Model comparison
+
+Let's proceed to compare the fitted models in more detail. First, we'll use a visualization of the models, and then employ metrics for a numerical comparison between the models.
+
+
+```{r}
+si_models = list(
+    "Baseline"                 = si_models$baseline,
+    "Month Seasonality"        = si_models$month,
+    "Drug Related Arrests"     = si_models$crimes,
+    "Drug Related Arrests v2 " = si_models$crimes2,
+    "Stepwise - AIC"           = si_models$stepwiseAIC,
+    "Stepwise - BIC"           = si_models$stepwiseBIC
+)
+```
+
+#### 2.4.1 Prediciton plots
+
+Let's first visualize the predictions along with a 95% confidence interval on the training set.
 
 ```{r}
 invisible(plot_multiple_model_predictions_over_time(
     df_ = si_crimes,
     models = si_models,
     y = "Shootings",
-    title = "Shootings in Queens - Training set predictions",
+    title = "Shootings in Staten Island - Training set predictions",
     ylab = "Shootings incidents",
     level = LEVEL,
     lwd = 1,
@@ -239,7 +376,9 @@ invisible(plot_multiple_model_predictions_over_time(
 ))
 ```
 
-Don't cover picks, probably errors difficult to model
+This type of prediction generally remains very close to the mean, highlighting what was already anticipated by the STL decomposition in the difficulty of modeling an erratic component that predominates in most observations.
+
+Now let's look at the predictions on the test set.
 
 ```{r}
 
@@ -257,30 +396,41 @@ invisible(plot_multiple_model_predictions_over_time(
 ))
 ```
 
-### Prediction metrics
+In general, the confidence interval is quite wide. The model that uses arrests for drug-related crimes does not deviate much from the average of the predictions, whereas the models that use certain months as predictors are able to deviate more.
+
+#### 2.4.2 Prediction metrics
+
+Now let's visualize the metrics such as adjusted R^2, AIC, and BIC for each model, accompanied by prediction metrics on the test set, specifically calculating the MSE and the average confidence interval for each prediction.
+
 
 ```{r}
-knit_table(
-    stats_to_table(
-        get_models_prediction_stats(
-            models = si_models,
-            df_ = si_crimes_test,
-            y = "Shootings"
-        )
-    )
-)
+
+si_pred_stats <- stats_to_table(get_models_prediction_stats(
+    models = si_models,
+    df_ = si_crimes,
+    y = "Shootings"
+))
+
+knit_table(si_pred_stats[order(si_pred_stats$MSE), ])
+
+rm(si_pred_stats)
+
 ```
 
-Discuss also in terms of varaiblity!
+The model that generally achieves the best results is the one selected by AIC, which combines the average level of four months and the number of arrests for three different crimes. However, it is debatable whether it really makes sense to compare these models when the best one has an error of only one more shooting compared to the baseline, mostly with a confidence interval of almost 1.
 
-## NYC Boroughs
+Instead of finding a good model to predict shootings in Staten Island, the results confirm that the reduced phenomenon is particularly difficult to model, with most of the variability explained by the erratic component that linear models fail to capture.
 
+A simple model like predicting the average number of arrests is still a good approximation for the number of shootings in an area of the city with few shooting incidents.
 
+## 3. NYC Boroughs
+
+Now let's consider the remaining boroughs of New York City, which are certainly more complex in terms of crime and shootings compared to Staten Island and therefore more interesting to model.
 
 ```{r}
-plot_prediction <- function(model, name, train=TRUE) {
+plot_prediction <- function(model, name, test=FALSE) {
 
-    if(train) {
+    if(! test) {
         df_ <- crimes
     } else {
         df_ <- crimes_test
@@ -292,10 +442,10 @@ plot_prediction <- function(model, name, train=TRUE) {
         df_ =df_,
         y = "Shootings",
         levels = "Borough",
-        title = paste("Shootings per Borough Prediction -", name, "-", ifelse(train, "Training", "Test"), "set"),
+        title = paste("Shootings per Borough Prediction -", name, "-", ifelse(!test, "Training", "Test"), "set"),
         ylab = "Shootings incidents",
         level = LEVEL,
-        ticks = ifelse(train, 12, 5),
+        ticks = ifelse(!test, 12, 5),
         lwd = 0.35,
         lwd_observations = 0.35,
         colors = unlist(PALETTE$boroughs),
@@ -306,9 +456,11 @@ plot_prediction <- function(model, name, train=TRUE) {
 
 }
 ```
-### Time series overview
+### 3.1 Time series overview
 
-Inspect times series
+#### 3.1.1 Shootings across Boroughs
+
+As a first visualization, let's examine the distribution of shootings across the boroughs over the years.
 
 ```{r}
 plot_multiple_ts(
@@ -326,7 +478,11 @@ plot_multiple_ts(
 )
 ```
 
-Look at their decomposition
+The four boroughs follow a similar trend that highlights a general condition characterizing the metropolis but at different scales. `Borough` is a discrete predictor, and we choose to consider Manhattan as the reference level since it appears to have the lowest number of shootings among the four.
+
+#### 3.1.2 STL decomposition
+
+As previously done for Staten Island, we utilize a time series decomposition of the four time series to observe how trends and seasonality may influence the number of shootings.
 
 ```{r}
 for (borough in unique(crimes$Borough)) {
@@ -339,17 +495,48 @@ for (borough in unique(crimes$Borough)) {
 
 ```
 
-All have seasonal component and a trend during year, with errorc component very important, maybe we can explain it with crimes.
+All four series exhibit a similar pattern, confirming a certain homogeneity among the boroughs. The three components have a more balanced contribution compared to Staten Island.
 
+The seasonal component illustrates an increase in cases during the summer and a decrease in winter; however, during the winter decline, there are also two relative peaks, one positive in December and one negative in February.
 
-Introduction
+The trend component shows a slow decline in shootings starting from 2010 until 2020, followed by a rapid increase that restores the values to the early decade levels.
+
+### 3.2 Linear models
+
+We now begin to model the number of shootings in the different boroughs using linear models.
+
 ```{r}
 models <- list()
 ```
 
-### Month seasonality
+#### 3.2.1 Baselines
 
-Scatterplot monthly.
+First, we use the intercept-only model, which assumes that the number of shootings is always equal to the mean. This model will serve as a baseline for comparison with subsequent models.
+
+```{r}
+
+models$baseline <- lm(Shootings ~ 1, data = crimes)
+
+lm_diagnostic(
+    models$baseline, name = "Baseline"
+)
+
+```
+
+Alongside this baseline, we also use a model that predicts the number of shootings as the mean for each borough.
+```{r}
+
+models$borough_mean <- lm(Shootings ~ Borough, data = crimes)
+
+lm_diagnostic(
+    models$borough_mean, name = "Borough Mean"
+)
+```
+
+#### 3.2.2 Monthly seasonality
+
+We now proceed to model the monthly seasonality of shootings in the different boroughs by including months as predictors. We use the discrete predictor `MonthName` to model monthly seasonality. As previously done, we do not assume any month as a reference level but consider the difference from the annual mean.
+
 ```{r}
 levels_scatterplot(
     df_ = crimes,
@@ -363,54 +550,143 @@ levels_scatterplot(
 )
 ```
 
-Clear seasonal effect with a rise in the summer period a smaller rise in january-december.
+We also employ `Borough` as a predictor to account for the different magnitudes of shootings across the various boroughs.
 
 ```{r}
 
 contrasts(crimes     $MonthName) <- contr.sum(12)
 contrasts(crimes_test$MonthName) <- contr.sum(12)
 
-models$month_steps <- lm(
+models$month_level <- lm(
     Shootings ~ MonthName + Borough,
     data = crimes
 )
 
 lm_diagnostic(
-    models$month_steps,
-    vif = FALSE,
-    influencial_points = FALSE
+    models$month_level,
+    effects = TRUE,
+    residuals = TRUE, qq = TRUE,
+    name = "Month Seasonality"
 )
+```
 
-plot_prediction(models$month_steps, "Month Steps")
-plot_prediction(models$month_steps, "Month Steps", train=FALSE)
+All predictors are significant, with the exception of October, which has a mean very close to the annual average. The QQ plot is not particularly satisfactory on the right tail, and the residual plot shows a slight quadratic curvature.
+
+A model that uses only the monthly mean as a predictor has an R^2 of $`r round(summary(models$month_level)$r.squared, 3)`$, meaning it explains about 61% of the data variability. This is a very good result for such a simple model, indicating that the seasonal component is a very important part of the phenomenon.
+
+Let's visualize how the model performs for each borough on the training set.
+
+```{r}
+plot_prediction(models$month_level, "Month Steps")
+```
+
+The model generally appears to capture the seasonal effect, although it is unable to capture some specific peaks and troughs, as well as a general trend that varies over the years.
+
+Let's now visualize its performance on the test set.
+
+
+```{r}
+plot_prediction(models$month_level, "Month Steps", test=TRUE)
 
 ```
 
-### Model seasonality with goniometri function
+The model seems to generalize well to unseen data, albeit with some imprecision.
 
-Periodic component we can think of modelling with sign and cosine
+#### 3.2.3. Modelling periodicity
+
+Although the previous model is good, it may use a high number of parameters to model the seasonal component. Let's consider using trigonometric functions of time in months with a period of 12 to see if we can still achieve a good approximation with fewer parameters.
 
 ```{r}
 
-models$periodic <- lm(
-    Shootings ~ sin(2 * pi * T / 12) + cos(2 * pi * T / 12) + Borough,
+models$goniometric <- lm(
+    Shootings ~ SinT + CosT + Borough,
     data = crimes
 )
 
-plot_prediction(models$periodic, "Periodic")
-plot_prediction(models$periodic, "Periodic", train=FALSE)
+lm_diagnostic(
+    models$goniometric,
+    qq = TRUE, residuals = TRUE,
+    name = "Month Seasonality"
+)
 
-stats_to_table(get_models_prediction_stats(
-    models = list(
-        MonthSteps = models$month_steps,
-        Periodic   = models$periodic
-    ),
-    df_ = crimes_test,
-    y = "Shootings"
-))[, 1:4]
 ```
 
-### Add trend information
+The residual plot consistently shows a slight quadratic effect compared to the fitted models. The QQ plot notably deteriorates on the right tail.
+
+Let's compare the two models in terms of AIC, BIC, and adjusted R^2.
+
+
+```{r}
+
+knit_table(
+    stats_to_table(get_models_prediction_stats(
+        models = list(
+            "Month Seasonality" = models$month_level,
+            "Time periodic"     = models$goniometric
+        ),
+        df_ = crimes_test,
+        y = "Shootings"
+    ))[, 2:4]
+)
+
+```
+
+
+
+The models are generally comparable, with a BIC that favors the second one as it uses one-sixth of the parameters of the first model. AdjR2 slightly favors the first model, likely due to the seasonal phenomenon where shootings increase in December and decrease in January, which a model using trigonometric functions cannot capture.
+
+However, BIC prefers the second model precisely because it uses fewer parameters compared to the first.
+
+Let's look at the mean standard error in this example.
+
+```{r}
+
+df_temp <- data.frame(
+    Borough   = "Brooklyn",
+    MonthName = month.abb,
+    T         = 0:11
+)
+df_temp$SinT <- round(cos(2 * pi * df_temp$T / 12), 5)
+df_temp$CosT <- round(cos(2 * pi * df_temp$T / 12), 5)
+
+df_temp
+
+```
+
+```{r}
+stats_to_table
+stats_to_table(get_models_prediction_stats(
+        models = list(
+            "Month Seasonality" = models$month_level,
+            "Time periodic"     = models$goniometric
+        ),
+        df_ = df_temp,
+        y = "Shootings"
+))
+
+```
+
+
+In general, the periodic model is also preferable in terms of uncertainty.
+
+Let's visualize its predictions on the training set and test set.
+
+
+```{r}
+plot_prediction(models$goniometric, "Time Periodic")
+```
+
+```{r}
+plot_prediction(models$goniometric, "Periodic", test=TRUE)
+```
+
+The predictions of the two models are comparable, but we prefer to retain the second model because it is less parameterized and less uncertain.
+
+
+#### 3.2.4. Modelling trend component
+
+A significant shortcoming of the previous models was their inability to capture variations in trends over time. Let's try using the time variable as a predictor. Since the curve described by the STL decomposition showed at least a cubic trend, let's attempt to fit this effect in the model.
+
 
 ```{r}
 # Add time indicator
@@ -422,27 +698,50 @@ models$trended <- lm(
 
 lm_diagnostic(
     models$trended, 
-    effects = FALSE,
-    vif = FALSE,
-    influencial_points = FALSE
+    residuals = TRUE, qq = TRUE,
+    name = "Seasonality and Trend"
 )
+```
 
+All predictors, including the coefficients for the time polynomial, are highly significant.
+
+The residual plot shows a quadratic effect for the fitted values, and the QQ plot is satisfactory on the right tail.
+
+Let's visualize the prediction on the training set.
+
+
+```{r}
 plot_prediction(models$trended, "Trended")
-plot_prediction(models$trended, "Trended", train=FALSE)
+```
 
+The prediction is certainly excellent and effectively models the change in the mean level over the years. However, this is indicative of overfitting. Let's verify this by checking the predictions on the test set.
+
+```{r}
+plot_prediction(models$trended, "Trended", test=TRUE)
+```
+
+The model exhibits clear generalization issues, primarily because the trend effect typically holds for short-term predictions but struggles to fit observations further into the future. We need to explore other strategies to predict variations relative to the monthly mean level.
+
+Nevertheless, all metrics favor the trend model, but we must be cautious as they are indicative of overfitting.
+
+```{r}
 stats_to_table(get_models_prediction_stats(
     models = list(
-        NoTrend = models$periodic,
+        NoTrend = models$goniometric,
         Trend   = models$trended
     ),
     df_ = crimes_test,
     y = "Shootings"
-))[, 1:4]
-
+))[, 2:4]
 ```
 
 
-### Total Arrests
+#### 3.2.5 Total Arrests
+
+In light of what has emerged, we could try using the number of arrests in the previous month as a predictor to capture variations over time relative to the monthly average. The number of arrests in the previous month can be a valid predictor as it reflects current city conditions that are likely to impact crime rates.
+
+Let's examine how the total number of arrests affects the number of shootings.
+
 
 ```{r}
 
@@ -452,33 +751,34 @@ totarrests <- lm(
 )
 
 lm_diagnostic(
-    totarrests,
-    effects=FALSE, vif=FALSE, influencial_points=FALSE
+    totarrests, residuals = TRUE,
+    name = "Total Arrests"
 )
-
-
 
 ```
 
+The residual plot shows a clear quadratic structure. Therefore, it makes sense to model a quadratic effect in the number of arrests.
+
+
 ```{r}
 totarrests2 <- lm(
-    Shootings ~ TotArrests +I(TotArrests^2),
+    Shootings ~ TotArrests + I(TotArrests^2),
     data = crimes
 )
 
 
 lm_diagnostic(
-    totarrests2,
-    effects=FALSE, vif=FALSE
+    totarrests2, residuals = TRUE,
+    name = "Total Arrests 2"
 )
+```
 
-# Find points with Cook's distance > 0.2
-summary(
-crimes[
-    which(cooks.distance(totarrests2) > 0.005), 
-    c("Year", "MonthName", "Borough", "TotArrests", "Shootings")
-])
+The residual plot is certainly more aligned with the assumptions now.
 
+When visualizing the predictions, it can be observed that a quadratic effect is definitely more plausible, with the number of shootings tending to increase when there are both below-average and above-average numbers of arrests.
+
+
+```{r}
 
 plot_multiple_model_prediction(
     df_=crimes,
@@ -497,109 +797,89 @@ plot_multiple_model_prediction(
 rm(list=c("totarrests", "totarrests2"))
 ```
 
-Most of leverage point comes from picks in summer or falls in winter that are difficult to model.
+We therefore use the number of arrests as a predictor to model the variations in shootings over time.
 
 ```{r}
 
 models$tot_arrests <- lm(
-    Shootings ~ TotArrests + I(TotArrests^2) + Borough,
+    Shootings ~ SinT + CosT + TotArrests + I(TotArrests^2) + Borough,
     data = crimes
 )
 
 lm_diagnostic(
     models$tot_arrests,
-    effects=FALSE, vif=FALSE, influencial_points=FALSE
+    residuals = TRUE, qq = TRUE,
+    
+    name = "Seasonality and Total Arrests"
 )
-
-plot_model_prediction_per_level(
-    model  = models$tot_arrests,
-    df_    = crimes,
-    x      = "TotArrests",
-    y      = "Shootings",
-    levels = "Borough",
-    title  = "Arrests impact on Shooting across Boroughs",
-    xlab   = "Total Arrests",
-    ylab   = "Shootings incidents",
-    level  = LEVEL,
-    colors = unlist(PALETTE$boroughs)
-)
-
-plot_prediction(models$tot_arrests, "Total Arrests")
-plot_prediction(models$tot_arrests, "Total Arrests", train=FALSE)
 ```
 
+The residual plot is quite satisfactory, while the QQ plot tends to deviate in the tails.
+
+Let's investigate if this new predictor has brought any advantages.
+
+
 ```{r}
-
-models$tot_arrests_I <- lm(
-    Shootings ~ TotArrests * Borough + I(TotArrests^2) * Borough,
-    data = crimes
-)
-
-lm_diagnostic(
-    models$tot_arrests_I,
-    effects=FALSE, vif=FALSE, influencial_points=FALSE
-)
-
 stats_to_table(get_models_prediction_stats(
     models = list(
-        TotArrests            = models$tot_arrests,
-        TotArrestsInteraction = models$tot_arrests_I
+        Periodic    = models$goniometric,
+        WithArrests = models$tot_arrests
     ),
     df_ = crimes_test,
     y = "Shootings"
-))[, 1:4]
-
+))[, 2:4]
 ```
 
-### Total Arrests and Periodic
+Including the number of arrests in the model significantly improves it across all considered metrics.
 
+Let's now visualize if this new information helps the model predict changes in the training set.
 
 
 ```{r}
-models$periodic_totarrests <- lm(
-    Shootings ~ sin(2 * pi * T / 12) + cos(2 * pi * T / 12) + 
-    Borough + TotArrests + I(TotArrests^2),
-    data = crimes
-)
-
-lm_diagnostic(
-    models$periodic_totarrests,
-    effects = FALSE,
-    influencial_points=FALSE
-)
-
-plot_prediction(models$periodic_totarrests, "Periodic and Total Arrests")
-plot_prediction(models$periodic_totarrests, "Periodic and Total Arrests", train=FALSE)
+plot_prediction(models$tot_arrests, "Total Arrests")
 ```
 
-Can in a way follow the trend and not degenrate as trying to fit a polynomial with the epoch
+The assumptions appear to be met with a prediction trend that manages to adapt to the trend over the years.
 
-Better describe
+Let's now visualize the test set.
 
-### Crimes model
-
-Let's see role of individual crime
 ```{r}
+plot_prediction(models$tot_arrests, "Total Arrests", test=TRUE)
+```
+
+In the test set, the seasonal component appears to dominate, but the prediction does not deteriorate as in the trend model. It seems to occasionally capture small variations that benefit the prediction, such as in January 2023 in Queens.
+
+#### 3.2.6. Crimes model
+
+Once it's established how significantly the total number of arrests in the previous month improves predictions, it's appropriate to question if there are specific crimes that have a significant impact on shootings and if combining them could further enhance predictions. To do this, let's first visualize the R-squared of models using the time component and one crime at a time.
+
+
+```{r}
+
 one_crime_model <- list()
 
-for(crime in CRIME_NAMES) {
+for(crime in c(CRIME_NAMES, "TotArrests")) {
     one_crime_model[[crime]] <- lm(
-        as.formula(paste0("Shootings ~", crime)),
+        as.formula(paste0("Shootings ~ SinT + CosT + ", crime)),
         data = crimes
     )
 }
 
+knit_table(
 stats_to_table(get_models_prediction_stats(
     models = one_crime_model,
     df_ = crimes,
     y = "Shootings"
 ))[, c(1, 3, 4)]
+)
+
+rm(one_crime_model)
 
 ```
 
-Even if theorretically better we have fourten the predictors most are not significative we keep a simpler one to gain in interprettoin
+The crime that appears to perform best in this case is `ViolenceAndDisruption` with an R-squared of 0.3978. However, it's worth noting that unlike the previous model, `TotArrests` was considered without the quadratic effect.
 
-### Stepwise serach
+To better investigate which crime is more influential, let's try a stepwise selection approach using BIC as the selection criterion.
 
 ```{r}
 
@@ -611,38 +891,46 @@ models$stepwise <- step(
     direction = "both",
     k = log(nrow(crime_tmp))
 )
-
-lm_diagnostic(
-    models$stepwise,
-    influencial_points = FALSE
-)
-
-
-
 ```
 
-Clear problem of multicollinearity and quadratic residuals for Offense crimes and also for MonthName
-
-### Crime specific
+The final model incorporates both spatial aggregation including `Borough` and temporal components including `SinT` and `CosT`. The selected crimes are `DrugRelated`, `ViolenceAndDisruption`, `Murder`, and `Theft`, with the first two known to be collinear.
 
 ```{r}
+lm_diagnostic(
+    models$stepwise,
+    collinearity = TRUE,
+    name = "Stepwise"
+)
+
+vif_diagnostic(models$stepwise)
+```
+
+However, the model suffers from a significant collinearity issue, resulting in an abnormal negative coefficient for `ViolenceAndDisruption`. Therefore, we refit the model excluding it.
+
+```{r}
+
 models$stepwise <- NULL
 
 models$crimes <- lm(
-    Shootings ~ sin(2 * pi * T / 12) + cos(2 * pi * T / 12) + Borough + Offense + Burglary + Murder,
+    Shootings ~ SinT + CosT + Borough + DrugRelated + Burglary + Murder,
     data = crimes
 )
 
-lm_diagnostic(models$crimes, effects=FALSE)
+summary(
+    lm_diagnostic(models$crimes, effects=FALSE),
+    residuals = TRUE, qq = TRUE,
+    name = "Crimes"    
+)
+```
 
-crimes[
-    which(cooks.distance(models$crimes) > 0.02), 
-    c("Year", "MonthName", "Borough", "Offense", "Burglary", "Murder", "Shootings")
-]
+All predictors are now significant and positively correlated with the response as expected.
 
+Let's compare this model with the one that considered all arrests together.
+
+```{r}
 stats_to_table(get_models_prediction_stats(
     models = list(
-        TotArrests      = models$tot_arrests,
+        TotArrests   = models$tot_arrests,
         CrimeSpecific = models$crimes
     ),
     df_ = crimes,
@@ -651,29 +939,45 @@ stats_to_table(get_models_prediction_stats(
 
 ```
 
+This model does not seem to provide advantages over the previous one under any metric used. It's important to note that the former has the advantage of polynomially modeling a predictor, which a stepwise selection model cannot do.
+
+Let's see the predictions of the model on the train and test sets.
 
 
 ```{r}
 
 plot_prediction(models$crimes, "Crime specific")
-plot_prediction(models$crimes, "Crime specific", train=FALSE)
+plot_prediction(models$crimes, "Crime specific", test=TRUE)
 
 ```
 
+If the training set appears similar to the model with the total number of arrests, the prediction of the test set is certainly much more influenced by the predictors of the number of arrests, providing a more less smooth prediction.
 
-### Shrinkage selection
+
+#### 3.2.7. Shrinkage selection
+
+As an alternative approach to predictor selection using stepwise regression, let's use shrinkage selection to identify the most important predictors.
+
+We will use three different values of alpha for elastic-net regularization:
+
+- $\alpha = 0$: Ridge regularization.
+- $\alpha = 1$: Lasso regularization.
+- $\alpha = 0.9998$: A combination close to pure Lasso.
+
+We will also use two selection metrics: `1se` and `min`.
+
 
 ```{r}
 
 # TODO Chiedere al colloquio se escludere Larceny
 SHRINKAGE_PREDICTORS <- c(
-    CRIME_NAMES, "Borough", "T", "MonthName"
+    CRIME_NAMES, "Borough", "SinT", "CosT", "T", "MonthName"
 )
 
 gs <- round(shrinkage_grid_search(
     df_ = crimes[, c(SHRINKAGE_PREDICTORS, "Shootings")], 
     y="Shootings", 
-    alphas=c(0, 1-0.0002, 1)
+    alphas=ALPHA_GLMNET
 ), 3)
 
 gs <- as.matrix(gs); gs[gs == 0] <- "."
@@ -681,6 +985,15 @@ knit_table(gs)
 rm(gs)
 
 ```
+
+The model with $\alpha = 1$ and `1se` selection selects about half of the parameters:
+
+- `SinT` and `CosT`, which model the seasonal effect.
+- Only the boroughs of Brooklyn and Bronx, with Queens not selected but closely scaled to shootings in the reference level of Manhattan.
+- The selected months are only February, September, and November.
+- The most important crimes appear to be `Murder`, `Theft`, and `DrugRelated`, similar to those selected by stepwise.
+
+Let's delve deeper into selecting the best lambda for this model.
 
 ```{r}
 
@@ -691,41 +1004,54 @@ models$shrinkage <- shrinkage_selection(
     alpha = 1
 )
 
-coef(models$shrinkage)
-
 ```
+
+Let's visualize model prediction on training and test set.
 
 ```{r}
 
 plot_prediction(models$shrinkage, name="Shrinkage")
-plot_prediction(models$shrinkage, name="Shrinkage", train=FALSE)
+plot_prediction(models$shrinkage, name="Shrinkage", test=TRUE)
 
 ```
 
+The predictions on both the training set and the test set are certainly the closest to the real observations so far. However, the major drawback of these models is the difficulty in calculating the confidence interval, which is not plotted and does not provide information about the uncertainty regarding the predictions.
 
-### Model comparison
+
+### 3.3 Model comparison
+
+Let's proceed to investigate the quality of all fitted models in terms of prediction metrics, AIC, BIC, and adjusted R-squared.
 
 ```{r}
-models$mean         <- lm(Shootings ~ 1,       data=crimes)
-models$borough_mean <- lm(Shootings ~ Borough, data=crimes)
+models = list(
+    "Baseline"               = models$baseline,
+    "Borough Mean"           = models$borough_mean,
+    "Month Seasonality"      = models$month_level,
+    "Time periodic"          = models$goniometric,
+    "Seasonality and Trend"  = models$trended,
+    "Total Arrests"          = models$tot_arrests,
+    "Crime Specific Arrests" = models$crimes,
+    "Shrinkage"              = models$shrinkage
+)
 ```
 
 ```{r}
 
-models_stats <- get_models_prediction_stats(
+models_stats <- stats_to_table(get_models_prediction_stats(
     models = models,
     df_ = crimes_test,
     y = "Shootings",
     glmnet_predictors = SHRINKAGE_PREDICTORS
-)
-out_table <- stats_to_table(models_stats)
-knit_table(out_table)
+))
+
+knit_table(models_stats[order(models_stats$MSE), ])
 
 ```
 
+We have confirmed that the trend-modeling model shows strong signs of overfitting because, despite having the best scores for each metric, the model makes significantly higher prediction errors compared to other models. While the seasonal component alone is capable of explaining around 60% of the data variability, this can be improved by adding information about the number of crimes committed in the previous month.
 
+Rather than using a model that focuses on specific crimes, using the total number of arrests leads to a more accurate and less uncertain model. Treating arrests with a quadratic effect results in an increase in shootings when arrests are very low or very high, explaining around 68% of the data variability.
 
+Even the shrinkage model has a good MSE; however, the inability to calculate prediction uncertainties makes the model less reliable.
 
-```{r}
-
-```
+Despite linear models yielding good results and aiding in understanding the phenomenon, it's important to transition to models better suited to the nature of the phenomenon under examination, to get as the same time a prediction-coherent codomain and a less incert prediction.
