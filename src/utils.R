@@ -1,17 +1,5 @@
 # --- ENVIRONMENT SETUP ---
 
-#' Load Required Packages
-#'
-#' This function checks if the required packages are installed and loads them.
-#'
-#' @param requirements A character vector specifying the names of the required packages.
-#'
-#' @return None
-#' @export
-#'
-#' @examples
-#' load_requirements(c("dplyr", "ggplot2"))
-#'
 load_requirements <- function(requirements) {
 
     for (req in requirements){
@@ -28,19 +16,6 @@ load_requirements <- function(requirements) {
     }
 }
 
-
-#' Setup Environment function
-#'
-#' This function sets up the environment for the project by loading required packages,
-#' closing all open devices, setting the seed for reproducibility, and setting the local language.
-#'
-#' @keywords setup environment
-#' @return None
-#' @export
-#'
-#' @examples
-#' setup_environment()
-#'
 setup_environment <- function() {
 
     # Load packages
@@ -58,7 +33,6 @@ setup_environment <- function() {
 }
 
 # --- DATA PREPARATION ---
-
 
 prepare_crimes <- function(crimes_df, use_families = TRUE) {
 
@@ -130,17 +104,6 @@ prepare_crimes <- function(crimes_df, use_families = TRUE) {
 }
 
 
-#' Split a dataframe into train and test sets based on a given year
-#'
-#' This function takes a dataframe and a vector of year as input and splits the dataframe into two sets:
-#' a train set and a test set. The test set contains all the rows with the specified year,
-#' while the train set contains all the remaining rows.
-#'
-#' @param df_ The input dataframe to be split
-#' @param year_test The year to be used for creating the test set
-#'
-#' @return A list containing the train and test sets
-#' @export
 train_test_split_by_year <- function(df_, year_test) {
 
     # Check if year_test is in df_$Year
@@ -195,67 +158,6 @@ split_statenisland <- function(crimes, crimes_test) {
     )
 }
 
-# --- MISC ---
-
-remove_alpha_channel <- function(colors) {
-    return(
-        unname(sapply(
-            colors, 
-            function(color) substr(color, 1, 7)
-        ))
-    )
-}
-
-# Function to extract legend
-extract_legend <- function(plot) {
-
-    g <- ggplotGrob(plot)
-    legend <- g$grobs[[which(sapply(g$grobs, function(x) x$name) == "guide-box")]]
-    return(legend)
-
-}
-
-replace_outliers <- function(
-    df_, 
-    y,
-    outliers, 
-    level
-) {
-
-    if(nrow(outliers) == 0) return(df_)
-
-for (i in 1:nrow(outliers)) {
-
-    time <- outliers[i, "Time"]
-    year  <- as.integer(format(time, "%Y"))
-    month <- as.integer(format(time, "%m"))
-    new_value <- outliers[i, "Value.New"]
-
-    df_[
-        df_$Borough == level &
-        df_$Year    == year &
-        df_$Month   == month
-    ,][[y]] <- c(new_value)
-}
-
-return(df_)
-
-}
-
-get_epoch <- function(year, month) {
-
-    first.year <- year[1]
-    first.month <- month[1]
-
-    (year - first.year) * 12 + (month +1 - first.year) %% 12 - 1
-}
-
-knit_table <- function(table) {
-
-    knitr::kable(table, format = "html") %>%
-        kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
-
-}
 
 prepare_outliers <- function(crimes_df) {
 
@@ -284,8 +186,71 @@ prepare_outliers <- function(crimes_df) {
     crimes_df$TotArrests <- rowSums(crimes_df[, CRIME_NAMES])
 
     return(crimes_df)
+
 }
 
+# --- MISC ---
+
+remove_alpha_channel <- function(colors) {
+    return(
+        unname(sapply(
+            colors, 
+            function(color) substr(color, 1, 7)
+        ))
+    )
+}
+
+
+extract_legend <- function(plot) {
+
+    g <- ggplotGrob(plot)
+    legend <- g$grobs[[which(sapply(g$grobs, function(x) x$name) == "guide-box")]]
+    return(legend)
+
+}
+
+replace_outliers <- function(
+    df_, 
+    y,
+    outliers, 
+    level
+) {
+
+    if(nrow(outliers) == 0) return(df_)
+
+    for (i in 1:nrow(outliers)) {
+
+        time <- outliers[i, "Time"]
+        year  <- as.integer(format(time, "%Y"))
+        month <- as.integer(format(time, "%m"))
+        new_value <- outliers[i, "Value.New"]
+
+        df_[
+            df_$Borough == level &
+            df_$Year    == year &
+            df_$Month   == month
+        ,][[y]] <- c(new_value)
+    }
+
+    return(df_)
+
+}
+
+get_epoch <- function(year, month) {
+
+    first.year <- year[1]
+    first.month <- month[1]
+
+    (year - first.year) * 12 + (month +1 - first.year) %% 12 - 1
+
+}
+
+knit_table <- function(table) {
+
+    knitr::kable(table, format = "html") %>%
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+}
 
 zero_to_point <-  function(df_) {
     df_ <- as.matrix(df_)

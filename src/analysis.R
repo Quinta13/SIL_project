@@ -1,4 +1,16 @@
-# --- LM DIAGNOSTIC ---
+#' Plotting Functions
+#'
+#' This file contains generic utility functions for data analysis, such as
+#' model diagnostics, PCA analysis, predictor selection and model predictions.
+#'
+#' @author Sebastiano Quintavalle
+#' @date 2024-05-15
+#' @version 1.0
+#'
+#' 
+
+
+# --- LINEAR MODEL DIAGNOSTIC ---
 
 
 vif_diagnostic <- function(model) {
@@ -6,6 +18,7 @@ vif_diagnostic <- function(model) {
     # Calculate VIF values
     vif_values <- vif(model)
 
+    # Return GVIF diagnostic in the case the model is a GLM
     if(! "numeric" %in% class(vif_values)) {
         return(gvif_diagnostic(model))
     }
@@ -19,6 +32,7 @@ vif_diagnostic <- function(model) {
 
     # Iterate over each predictor and store its VIF value and indicator in the data frame
     for (i in 1:length(vif_values)) {
+
         predictor <- names(vif_values)[i]
         vif_value <- vif_values[i]
         
@@ -30,22 +44,26 @@ vif_diagnostic <- function(model) {
             vif_value > ( 2.5), "*"  , 
                                 "."
         )))
+
         # Add the predictor name, VIF value, and indicator to the data frame
         vif_df <- rbind(vif_df, data.frame(
-            VIF = vif_value,
-            Indicator = indicator,
-            stringsAsFactors = FALSE)
-        )
+            VIF              = vif_value,
+            Indicator        = indicator,
+            stringsAsFactors = FALSE
+        ))
+    
     }
 
     rownames(vif_df) <- names(vif_values)
 
+    # Print the data frame
     print(vif_df)
     print("")
     print("Legend: . < 2.5, * < 5, ** < 10, *** > 10")
 
     # Return the data frame
     return(vif_df)
+
 }
 
 
@@ -78,7 +96,7 @@ lm_diagnostic <- function(
         )
     }
 
-    # Influencial points
+    # Influential points
     if(cook_dist) {
         influenceIndexPlot(
             model, 
@@ -106,7 +124,6 @@ lm_diagnostic <- function(
 
 # --- GLM DIAGNOSTIC ---
 
-
 glm_plot_predictor_residuals <- function(
     model, df_, 
     residual_type = "pearson", ncol = 0,
@@ -131,40 +148,36 @@ glm_plot_predictor_residuals <- function(
     # Remove all interaction terms - aka they have : in the Pred name
     terms_used <- terms_used[!grepl(":", terms_used)]
 
-
-    if(ncol == 0) {
-        ncol <- ceiling(sqrt(length(terms_used)))
-    }
-
+    if(ncol == 0) ncol <- ceiling(sqrt(length(terms_used)))
 
     # Create a list to store the plots
     plot_list <- list()
-
 
     # Generate a plot for each predictor
     for (pred in terms_used) {
 
         if(class(df_[[pred]]) == "factor") {
+
             p <- ggplot(df_, aes_string(x = pred, y = "residuals")) +
-            geom_boxplot(color = "#003865") +
-            labs(
-                x = element_blank(),
-                y = element_blank(),
-                title = pred,
-            ) +
-            theme_minimal()
+                geom_boxplot(color = "#003865") +
+                labs(
+                    x = element_blank(),
+                    y = element_blank(),
+                    title = pred,
+                ) +
+                theme_minimal()
 
         } else {
             
             p <- ggplot(df_, aes_string(x = pred, y = "residuals")) +
-            geom_point(color = "#003865") +
-            geom_smooth(method = "loess", se = FALSE, color = "#ac0000f1") +
-            labs(
-                x = element_blank(),
-                y = element_blank(),
-                title = pred,
-            ) +
-            theme_minimal()
+                geom_point(color = "#003865") +
+                geom_smooth(method = "loess", se = FALSE, color = "#ac0000f1") +
+                labs(
+                    x = element_blank(),
+                    y = element_blank(),
+                    title = pred,
+                ) +
+                theme_minimal()
         }
         
     
@@ -180,7 +193,6 @@ glm_plot_predictor_residuals <- function(
     )
 
 }
-
 
 
 glm_diagnostic <- function(
@@ -203,7 +215,7 @@ glm_diagnostic <- function(
     if (residuals) {
         glm_plot_predictor_residuals(model, df_, title=name)
     }
-    
+
 
 }
 
@@ -244,32 +256,13 @@ gvif_diagnostic <- function(model) {
 
     rownames(vif_df) <- rownames(vif_values)
 
+    # Print the data frame and legend
     print(vif_df)
     print("")
     print("Legend: . < 2.5, * < 5, ** < 10, *** > 10")
 
     # Return the data frame
     return(vif_df)
-}
-
-plot_correlation_matrix <- function(df, title="") {
-
-    # Compute the correlation matrix for numeric columns
-    numeric_cols <- sapply(df, is.numeric)
-    cor_matrix   <- cor(df[, numeric_cols], use = "complete.obs")
-
-    # Visualize the correlation matrix using corrplot
-    corrplot(
-        cor_matrix, 
-        method = "color",
-        addCoef.col = "black",
-        main = title,
-        cex.main = 1.5,
-        mar = c(0, 0, 5, 0),
-        tl.cex = 0.5,
-        number.cex = 0.5
-    )
-
 }
 
 
@@ -293,16 +286,16 @@ plot_model_coefficients <- function(
 
     # Plot using ggplot2
     p <- ggplot(df, aes(x=Index, y=Coefficient)) +
-        geom_point(color="steelblue", size=3) +
-        geom_line(color="steelblue") +
-        labs(x=xlab, y="Coefficient", title=title) +
-        scale_x_continuous(breaks=1:length(coefs2), labels=labels) +
-        theme_minimal() +
-        theme(axis.text.x=element_text(angle=45, hjust=1)) +
-        theme(
-            panel.grid.major = element_line(color = "grey80"), 
-            panel.grid.minor = element_line(color = "grey90")
-        )
+            geom_point(color="steelblue", size=3) +
+            geom_line(color="steelblue") +
+            labs(x=xlab, y="Coefficient", title=title) +
+            scale_x_continuous(breaks=1:length(coefs2), labels=labels) +
+            theme_minimal() +
+            theme(axis.text.x=element_text(angle=45, hjust=1)) +
+            theme(
+                panel.grid.major = element_line(color = "grey80"), 
+                panel.grid.minor = element_line(color = "grey90")
+            )
 
     return(p)
 
@@ -407,6 +400,28 @@ pca_analysis <- function(
 }
 
 # --- PREDICTOR SELECTION ---
+
+
+plot_correlation_matrix <- function(df, title="") {
+
+    # Compute the correlation matrix for numeric columns
+    numeric_cols <- sapply(df, is.numeric)
+    cor_matrix   <- cor(df[, numeric_cols], use = "complete.obs")
+
+    # Visualize the correlation matrix using corrplot
+    corrplot(
+        cor_matrix, 
+        method = "color",
+        addCoef.col = "black",
+        main = title,
+        cex.main = 1.5,
+        mar = c(0, 0, 5, 0),
+        tl.cex = 0.5,
+        number.cex = 0.5
+    )
+
+}
+
 
 shrinkage_grid_search <- function(df_, y, alphas, family="gaussian")  {
 
@@ -535,6 +550,7 @@ shrinkage_selection <- function(
 
 }
 
+
 subset_regression_info <- function(subset_reg, title="") {
 
     # Extract the summary information
@@ -595,8 +611,8 @@ subset_regression_info <- function(subset_reg, title="") {
 
 }
 
-
 # --- PREDICTIONS ---
+
 
 generate_predictions_with_ci <- function(
     model, 
@@ -693,6 +709,7 @@ get_prediction_stats <- function(
     
 }
 
+
 get_models_prediction_stats <- function(
     models,
     df_, 
@@ -787,6 +804,7 @@ generate_prediction_table <- function(models, predictor_name, predictor_values) 
   
   return(prediction_table)
 }
+
 
 df_group_stats <- function(data, group_col, value_col) {
     stats_table <- aggregate(

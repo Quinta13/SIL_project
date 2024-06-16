@@ -9,7 +9,6 @@
 
 # --- BOXPLOT ---
 
-# Plot a boxplot for each borough
 plot_boxplot <- function(df, x, y, title, colors=c()) {
 
     p = ggplot(df, aes(x = get(x), y = get(y))) +
@@ -27,29 +26,6 @@ plot_boxplot <- function(df, x, y, title, colors=c()) {
 
 # --- SCATTERPLOTS ---
 
-#' Create a basic scatterplot
-#'
-#' This function creates a basic scatterplot using ggplot2 library.
-#'
-#' @param data The data frame containing the variables to be plotted.
-#' @param x The name of the variable to be plotted on the x-axis.
-#' @param y The name of the variable to be plotted on the y-axis.
-#' @param size The size of the points in the scatterplot (default is 1).
-#' @param shape The shape of the points in the scatterplot (default is 16).
-#' @param color The color of the points in the scatterplot (default is "steelblue").
-#' @param jitter_ A logical value indicating whether to add jitter to the x-axis (default is FALSE).
-#' @param xlab The label for the x-axis (default is an empty string).
-#' @param ylab The label for the y-axis (default is an empty string).
-#'
-#' @return A ggplot object representing the scatterplot.
-#'
-#' @examples
-#' data <- data.frame(x = rnorm(100), y = rnorm(100))
-#' basic_scatterplot(data, "x", "y")
-#'
-#'
-#' @export
-#' 
 basic_scatterplot <- function(
     data, x, y,
     size    = 1,
@@ -85,35 +61,6 @@ basic_scatterplot <- function(
 }
 
 
-#' Create a scatterplot with different levels
-#'
-#' This function creates a scatterplot with different levels based on a specified variable.
-#'
-#' @param df_ The data frame containing the variables.
-#' @param x The name of the variable to be plotted on the x-axis.
-#' @param y The name of the variable to be plotted on the y-axis.
-#' @param levels The name of the variable used to determine the levels.
-#' @param title The title of the scatterplot (default is an empty string).
-#' @param legend_pos The position of the legend in the plot (default is "topright").
-#' @param xlab The label for the x-axis (default is an empty string).
-#' @param ylab The label for the y-axis (default is an empty string).
-#' @param jitter_ A logical value indicating whether to add jitter to the x-axis (default is FALSE).
-#' @param ticks The number of ticks on the x-axis (default is 10).
-#' @param shape The shape of the points in the scatterplot (default is 16).
-#' @param size The size of the points in the scatterplot (default is 1).
-#' @param colors A vector of colors to be used for the levels (default is an empty vector).
-#'
-#' @return A ggplot object representing the scatterplot.
-#'
-#' @examples
-#' df <- data.frame(
-#'   x = rnorm(100),
-#'   y = rnorm(100),
-#'   levels = sample(c("A", "B", "C"), 100, replace = TRUE)
-#' )
-#' levels_scatterplot(df, "x", "y", "levels", title = "Scatterplot with Levels")
-#'
-#' @export 
 levels_scatterplot <- function(
     df_, x, y, levels,
     title      = "", 
@@ -179,32 +126,6 @@ levels_scatterplot <- function(
 
 # --- TIME SERIES ---
 
-#' Plot Time Series Data
-#'
-#' This function plots time series data based on the specified level and year.
-#'
-#' @param df_ts The data frame containing the time series data.
-#' @param group The group of the data to filter on.
-#' @param y The year to filter on.
-#' @param xlab The label for the x-axis. Default is "Year".
-#' @param ylab The label for the y-axis. If empty, the y parameter will be used as the label.
-#' @param title The title of the plot.
-#' @param col The color of the line. Default is "#4683b4a3".
-#' @param lwd The line width. Default is 1.
-#' @param ticks The number of ticks on the x-axis. Default is 10.
-#' @param yrange The range of values for the y-axis. If empty, the range will be automatically determined.
-#'
-#' @return A ggplot object representing the plot.
-#'
-#' @examples
-#' df <- data.frame(
-#'   YearMonth = seq(as.Date("2022-01-01"), as.Date("2022-12-31"), by = "month"),
-#'   Count = rnorm(12)
-#' )
-#' plot_ts(df, "Year", 2022)
-#'
-#' @export
-#' 
 plot_ts <- function(
     df_ts, group, y,
     xlab   = "Year",
@@ -305,8 +226,6 @@ plot_multiple_ts <- function(
 
     return(p)
 }
-
-
 
 # --- PREDICTIONS ---
 
