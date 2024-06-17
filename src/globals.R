@@ -50,7 +50,7 @@ LEVELS_ORDER <- c(
 LEVEL <- 0.95  # Confidence level for the prediction intervals
 
 ALPHA <- 1.                       # Elastic net mixing parameter default
-ALPHA_GLMNET <- c(0, 1 - 0.1, 1)  # Elastic net parameters for the grid search
+ALPHA_GLMNET <- c(0, 1 - 0.01, 1)  # Elastic net parameters for the grid search
 
 YEAR_TEST <- c(2022, 2023)        # Year to use as test set
 

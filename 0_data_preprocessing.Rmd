@@ -148,6 +148,8 @@ CRIME_TYPES <- list(
 
 ```
 
+---
+
 ## 2. Shootings data
 
 We start by loading  the **shootings dataset** [`shootings.csv`](/data/shooting.csv).  
@@ -250,6 +252,7 @@ summary(shootings_month)
 
 ```
 
+---
 
 ## 3. Arrests data
 

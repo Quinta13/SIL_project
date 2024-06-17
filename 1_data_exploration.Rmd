@@ -101,6 +101,8 @@ rm(split)
 
 After performing the split, the training set contains $`r nrow(crimes)`$ rows, while the test set contains $`r nrow(crimes_test)`$ rows.
 
+---
+
 ## 2. Visualizations
 
 As a first step in data exploration, we will proceed with a series of visualizations that will provide an overview of the involved variables and their relationships.
@@ -414,6 +416,8 @@ Looking at the other four boroughs, each appears to delineate a quadratic relati
 
 This pattern is interesting because it suggests that compared to an average number of arrests, shootings tend to increase both when there are few arrests and and when there are many. It's important to note that situations with few arrests and many shootings still have a limited number of observations. Intuitively, this could be explained by the fact that low police control and therefore few arrests may facilitate shootings due to lower deterrence. Conversely, increased crime rates may require a more intensive police response, resulting in more arrests.
 
+---
+
 ## 3. Interventions on data
 
 The previous visualizations highlighted some elements that could be problematic for modeling. Therefore, we propose to analyze these elements in more detail in order to manage them appropriately.
@@ -619,6 +623,8 @@ Despite the sudden change appearing to have stabilized in the time series, handl
 
 For this reason, we prefer to exclude this predictor from the prediction model.
 
+---
+
 ## 4. Crimes multicollienarity
 
 Particular importance during modeling should be given to the multicollinearity of predictors. Reflecting a unique condition of the city and often involving overlapping areas of crime that may influence each other, it is necessary to delve into and quantify their degree of correlation.
@@ -822,6 +828,7 @@ rm(full_model)
 
 Multicollinearity has been significantly reduced, although as expected, crimes related to assault and drug-related offenses remain correlated, belonging to distinct crime categories in terms of interpretation preference.
 
+---
 
 ## 5. Boroughs and time
 
@@ -879,3 +886,4 @@ This report has allowed for better data engineering in preparation for analysis.
 - Crime families are connected in different ways with shootings; notably, `ViolenceAndDisruption` and `DrugRelated` show some degree of collinearity.
 - The interaction between shootings and the total number of arrests exhibits a quadratic effect, where shootings tend to increase with either very few or very many arrests.
 
+---

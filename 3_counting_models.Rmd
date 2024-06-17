@@ -11,7 +11,7 @@ output:
 
 ## 1. Introduction 
 
-The purpose of this notebook is to expand on the analyses conducted in the previous notebook [2_linear_models.Rmd](2_linear_models.Rmd), which employed linear regression models to predict the number of shootings in New York City.
+The purpose of this notebook is to expand on the analyses conducted in the previous notebook [`2_linear_models.Rmd`](2_linear_models.Rmd), which employed linear regression models to predict the number of shootings in New York City.
 
 This notebook extends the analysis by using count models to predict the number of shootings in New York City. The main goal is to investigate whether this second type of modeling, which adopts a family of models more appropriate for the data in question, can lead to better results in terms of both predictions and interpretation.
 
@@ -22,8 +22,8 @@ The study will begin with an extensive use of Poisson models, which will later b
 
 # 1. RMardown styling
 knitr::opts_chunk$set(echo=FALSE)
-knitr::opts_chunk$set(fig.width = 12, fig.height = 8)
-
+knitr::opts_chunk$set(fig.width=8, fig.height=6, fig.align='center')
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 # 2. Project environment setup
 source("src/init.R")
 
@@ -63,6 +63,8 @@ crimes <- prepare_outliers(crimes)
 
 ```
 
+---
+
 ## 2. Poisson Regression
 
 Let's start by using a Poisson model to predict the number of shootings in New York City.
@@ -70,7 +72,7 @@ Let's start by using a Poisson model to predict the number of shootings in New Y
 
 ### 2.1. Model assumptions
 
-First, it is important to verify that our data are consistent with the assumptions required by this type of model. Specifically, the model assumes that the number of shootings in a given period is a random variable that follows a Poisson distribution. A natural consequence of this is the strong assumption that the mean and variance of the count are equal.
+First, it is important to verify that our data are consistent with the assumptions required by this type of model. Specifically, the model assumes that the response variable is a random variable that follows a Poisson distribution. A natural consequence of this is the strong assumption that the mean and variance of the count are equal.
 
 Let's try to verify if this assumption is generally met, or if it holds at the Borough level.
 
@@ -88,10 +90,10 @@ mean_var
 
 Clearly, the variance is greater than the mean, indicating that overdispersion has occurred. In light of this, it would be more appropriate to transition to a Quasi-Poisson model, which relaxes this assumption by assuming a certain overdispersion parameter. However, it is worth noting that the difference between the two is not in the prediction, but in the estimation of confidence intervals and thus in the uncertainty of the model.
 
-Using a Quasi-Poisson model also makes it impossible to use metrics such as AIC and BIC. Therefore, Poisson models will still be estimated later to compare these metrics, knowing that the final model will be a Quasi-Poisson.
+Using a Quasi-Poisson model also makes it impossible to use metrics such as $AIC$ and $BIC$. Therefore, Poisson models will still be employed for model selection to leverage on the comprison of these metrics, but knowing the final model will be a Quasi-Poisson.
 
 
-### 2.2. Seasonal model
+### 2.2. Poisson models
 
 Let's begin constructing multiple generalized linear Poisson regression models to predict the number of shootings in New York City. As done previously, Manhattan serves as the reference level for the Boroughs, while for monthly predictors, we use a contrast that references the predictors to the mean of the observations.
 
@@ -138,7 +140,7 @@ plot_prediction <- function(model, name, test=FALSE) {
 
 #### 2.2.1. Baselines
 
-Let's use three baseline models to compare with the more complex models that will be built later. Specifically, we will use three models that predict: the overall average of shootings, the average shootings per Borough.
+Let's use two baseline models to compare with the more complex models that will be built later. Specifically, we will use two models that predict the overall average of shootings, and the average shootings per Borough.
 
 
 The mean baseline.
@@ -151,7 +153,7 @@ pois_models$baseline <- glm(
     family = "poisson"
 )
 
-glm_diagnostic(pois_models$baseline)
+glm_diagnostic(pois_models$baseline, name = "Baseline")
 ```
 
 The borough mean baseline.
@@ -163,7 +165,7 @@ pois_models$baseline_borough <- glm(
     family = "poisson"
 )
 
-glm_diagnostic(pois_models$baseline_borough)
+glm_diagnostic(pois_models$baseline_borough, name = "Baseline Borough")
 
 
 ```
@@ -201,12 +203,12 @@ pois_models$seasonal_periodic <- glm(
 
 glm_diagnostic(
     model=pois_models$seasonal_periodic,  df_=crimes,
-    residuals = TRUE, name = "Seasonal model"
+    residuals = TRUE, name = "Seasonal Periodic model"
 )
 
 ```
 
-It is now interesting to compare these models with their linear counterpart in terms of the AIC and BIC metrics, as well as their predictions on the test set, particularly focusing on their uncertainty.
+It is now interesting to compare these models with their linear counterpart in terms of the $AIC$ and $BIC$ metrics, as well as their predictions on the test set, particularly focusing on their uncertainty.
 
 
 ```{r}
@@ -224,7 +226,7 @@ knit_table(stats_to_table(get_models_prediction_stats(
 
 ```
 
-If Poisson models tend to perform worse in terms of AIC and BIC, their clear advantage lies in reducing prediction variance, achieved through stronger assumptions about the observed data.
+If Poisson models tend to perform worse in terms of $AIC$ and $BIC$, their clear advantage lies in reducing prediction variance, achieved through stronger assumptions about the observed data.
 
 Comparing MSE between the two models using monthly averages isn't particularly insightful as it only employs discrete levels. However, there is an improvement for the periodic model both in terms of MSE and, importantly, uncertainty.
 
@@ -253,12 +255,12 @@ glm_diagnostic(
 pois_models$trended <- NULL
 ```
 
-In general, we can see that including time linearly is not sufficient to capture the trend. Let's try including a third-degree polynomial to better capture the trend, as done previously with linear models.
+From the `T` residuals we can see that including time linearly is not sufficient to capture the trend. Let's try including a third-degree polynomial to better capture the trend, as done previously with linear models.
 
 ```{r}
 
 pois_models$trended2 <- glm(
-    Shootings ~ Borough + MonthName + poly(T, 3),
+    Shootings ~ Borough + SinT + CosT + poly(T, 3),
     data = crimes,
     family = poisson
 )
@@ -285,11 +287,9 @@ Let's now see the model's performance on the test set.
 plot_prediction(pois_models$trended2, "Trended", test=TRUE)
 ```
 
-As expected, the model poorly generalizes on long-term predictions, where the fitted trend information no longer appears valid.
+As expected, the model poorly generalizes on long-term predictions, where the fitted trend information no longer appears valid and progressvely become more incertain with the time.
 
-However, compared to the linear counterpart, the model seems to perform significantly better in terms of short-term prediction.
-
-Let's compare the models in the first 3 months of the test set.
+However, compared to the linear counterpart, the model seems to perform significantly better in terms of short-term prediction. Let's compare the models in the first 3 months of the test set.
 
 ```{r}
 # Good for short-term prediction. Compare with others
@@ -340,7 +340,7 @@ rm(list = c(
 
 ```
 
-As evident from the table, the Poisson model is indeed better at capturing short-term information compared to the linear model.
+As evident from the table, the Poisson model is indeed better at capturing short-term information compared to the linear model, with also less uncertainty.
 
 #### 2.2.4. Total Arrests model
 
@@ -354,7 +354,8 @@ pois_models$totarrests <- glm(
 
 glm_diagnostic(
     pois_models$totarrests, df_=crimes,
-    residuals = TRUE
+    residuals = TRUE,
+    name = "Total Arrests model"
 )
 
 ```
@@ -373,7 +374,7 @@ plot_prediction(pois_models$totarrests, "Total Arrests", test=TRUE)
 
 The model appears to capture a certain trend compared to the observations but is still dominated by a seasonal component. It especially has a very narrow confidence interval, particularly in the two boroughs of Manhattan and Queens, which record fewer shooting incidents.
 
-However, the model improves the model quality compared to using seasonality alone.
+The model improves the model quality compared to using seasonality alone.
 
 ```{r}
 knit_table(stats_to_table(get_models_prediction_stats(
@@ -395,9 +396,9 @@ Firstly, we will use a shrinkage method to select the most significant predictor
 
 We will use three different values of alpha for elastic-net regularization:
 
-- $\alpha = 0$: Ridge regularization.
-- $\alpha = 1$: Lasso regularization.
-- $\alpha = 0.9998$: A combination close to pure Lasso.
+- $\alpha = `r ALPHA_GLMNET[1]`$: Ridge regularization.
+- $\alpha = `r ALPHA_GLMNET[3]`$: Lasso regularization.
+- $\alpha = `r ALPHA_GLMNET[2]`$: A combination close to pure Lasso.
 
 We will also use two selection metrics: `1se` and `min`, indicating whether to select the minimum lambda selected by cross-validation or the lambda that gives a more regularized model within one standard error of the minimum lambda.
 
@@ -405,15 +406,14 @@ We will also use two selection metrics: `1se` and `min`, indicating whether to s
 
 SHRINKAGE_PREDICTORS <- c("T", "CosT", "SinT", "Borough", CRIME_NAMES)
 
-knit_table(
-zero_to_point(round(
-shrinkage_grid_search(
+gs <- shrinkage_grid_search(
     df_ = crimes[, c(SHRINKAGE_PREDICTORS, "Shootings")], 
     y="Shootings", 
     alphas=ALPHA_GLMNET,
     family="poisson"
-), 3))
 )
+
+knit_table(zero_to_point(gs))
 
 ```
 
@@ -448,13 +448,11 @@ plot_prediction(pois_models$lasso, "Lasso Shrinkage", test=TRUE)
 
 ```
 
-Interestingly, the model appears less smooth and seems to adjust to slight dips and peaks, likely due to murder arrests.
-
-It's important to note the challenge of calculating confidence intervals for a LASSO model, whose primary goal is predictor selection.
+Interestingly, the model appears less smooth and seems to adjust to slight dips and peaks, likely due to murder arrests. It's important to note the challenge of calculating confidence intervals for a LASSO model, whose primary goal is predictor selection.
 
 #### 2.2.6. Stepwise model
 
-Lastly, let's try automatically selecting predictors using a stepwise method with a BIC criterion.
+Lastly, let's try automatically selecting predictors using a stepwise method with a $BIC$ criterion.
 
 ```{r}
 
@@ -485,23 +483,24 @@ All selected predictors are significant; however, we need to be cautious as some
 gvif_diagnostic(pois_models$stepwise)
 ```
 
-The model is indeed somewhat collinear due to `DrugRelated` and `ViolenceAndDisruption`, as well as an interaction among the crimes. Additionally, the predictor $T$ also shows a high level of collinearity, which can be explained by its modeling of a temporal trend likely influenced by some form of arrest increase or decrease.
+The model is indeed somewhat collinear due to `DrugRelated` and `ViolenceAndDisruption`, as well as an interaction among the crimes. Additionally, the time predictor `T` also shows a high level of collinearity, which can be explained by its modeling of a temporal trend likely influenced by some form of arrest increasing or decreasing over time, like drug-related crimes.
 
 
-##### 2.2.7 Crimes specific arrests
+#### 2.2.7 Crimes specific arrests
 
-In light of the previous collinearity issues, we will fit a second model where we remove collinear predictors. We will then select, along with the temporal modeling and boroughs, only specific types of crimes.
+In light of the previous collinearity issues, we will fit a second model where we remove collinear predictors. We will then select, along with the temporal modeling and boroughs, only specific types of crimes `Theft`, `DrugRelated`, and `Burglary`.
 
 ```{r}
 pois_models$crimes <- glm(
-    Shootings ~ Borough + DrugRelated + Theft +  Burglary + Murder +
+    Shootings ~ Borough + DrugRelated + Theft +  Burglary +
         SinT + CosT,
     data = crimes, family = "poisson"
 )
 
 glm_diagnostic(
     pois_models$crimes, df_=crimes,
-    residuals = TRUE
+    residuals = TRUE,
+    name = "Crime specific model"
 )
 ``` 
 
@@ -514,7 +513,7 @@ plot_prediction(pois_models$crimes, "Crimes", test = TRUE)
 
 ### 2.3. Model comparison
 
-Let's compare the fitted models in terms of AIC and BIC, and analyze their predictive power in terms of MSE and average prediction SE (Standard Error).
+Let's compare the fitted models in terms of $AIC$ and $BIC$, and analyze their predictive power in terms of MSE and average prediction SE (Standard Error).
 
 ```{r}
 pois_models <- list(
@@ -556,8 +555,9 @@ In general, other models that add information about specific crimes, albeit in a
 
 Therefore, we can conclude that there is statistical significance in how the number of arrests reflects a crime condition in the city that subsequently impacts the number of shootings occurring in the near future.
 
+---
 
-## 3. Comparison with other Counting Models
+## 3. Counting Models Comparison
 
 Considering the factors that best help model the number of shootings using Poisson models, let's now compare them with other count models such as Quasi-Poisson, Negative Binomial, and Generalized Additive Models (GAM).
 
@@ -603,9 +603,9 @@ summary(model.quasipois)
 
 Compared to before, the models remain significant, but with slightly less significance for `Burglary`.
 
-More importantly, the model estimates a dispersion parameter equal to $r`(summary(model.quasipois))$dispersion`$.
+More importantly, the model estimates a dispersion parameter equal to $`r (summary(model.quasipois))$dispersion`$.
 
-The coefficients of the two models are the same, and so will be the predictions, but with a wider confidence interval for the Quasi-Poisson model. Let's examine the behavior in a sample dataset where we vary only the number of arrests related to drug-related crimes.
+The coefficients of the two models are the same, and so will be the predictions, but with a wider confidence interval for the Quasi-Poisson model. Let's examine the behavior in an example dataset where we vary only the number of arrests related to drug-related crimes.
 
 
 ```{r}
@@ -687,7 +687,7 @@ summary(model.nb)
 ```
 
 The Negative Binomial model is significant for all predictors.
-Let's see how it compares to the Poisson model in terms of AIC and BIC.
+Let's see how it compares to the Poisson model in terms of $AIC$ and $BIC$.
 
 
 ```{r}
@@ -704,7 +704,7 @@ knit_table(stats_to_table(get_models_prediction_stats(
 
 ```
 
-The Negative Binomial model is indeed significantly better for both metrics, likely due to better alignment with the nature of the data.
+The Negative Binomial model is indeed  better for both metrics, likely due to better assumption alignment with the nature of the data.
 
 Finally, let's visualize its predictions on the training and test sets.
 
@@ -808,11 +808,11 @@ knit_table(out_table)
 
 ```
 
-Examining the AIC and BIC, it is evident that Generalized Additive Models (GAMs) generally outperform their linear counterparts, likely due to their ability to capture nonlinearity in the data. Additionally, models employing the Negative Binomial distribution show superior performance compared to Poisson models, presumably because they can accommodate greater variance relative to the mean.
+Examining the $AIC$ and $BIC$, it is evident that Generalized Additive Models (GAMs) generally outperform their linear counterparts, likely due to their ability to capture nonlinearity in the data. Additionally, models employing the Negative Binomial distribution show superior performance compared to Poisson models, presumably because they can accommodate greater variance relative to the mean.
 
 Nevertheless, the Poisson models incorporating three types of crimes as predictors achieve the lowest MSE and exhibit lower uncertainty.
 
-This phenomenon may be partly attributed to the other models closely fitting the training data, thereby restricting their ability to generalize to new observations. This inverse relationship between AIC and MSE appears to substantiate this observation.
+This phenomenon may be partly attributed to the other models closely overfitting the training data, thereby restricting their ability to generalize to new observations. This inverse relationship between $AIC$ and MSE appears to substantiate this observation.
 
 ## 4. Conclusion
 
@@ -820,9 +820,10 @@ In this notebook, we have analyzed various count models to predict the number of
 
 Among these models, the Quasi-Poisson model emerges as the best performer on unseen data, aligning well with the assumptions about shooting incidents.
 
-The phenomenon of shootings exhibits a strong seasonal component, with counts varying significantly throughout the year. Overall, it is closely tied to the total number of arrests in the city's recent past, where shootings tend to increase in response to both an increase and a decrease in arrests.
+The phenomenon of shootings exhibits a strong seasonal component, with counts varying significantly throughout the year. Overall, the pehomenon is closely tied to the total number of arrests in the city's recent past, where shootings tend to increase in response to both an increase and a decrease in arrests.
 
 Specifically, crimes related to drug-related arrests notably influence shootings, which are in turn closely associated with acts of vandalism and assaults like bribery and theft.
 
-Generally, this phenomenon affects the entire city uniformly, with boroughs characterized by higher crime rates, except for Staten Island, which generally has very low rates of shootings and arrests.
+Generally, this phenomenon affects the entire city uniformly, with some boroughs characterized by higher crime rates on average. This is not the case for Staten Island borough, which generally has very low rates of shootings and arrests.
 
+---

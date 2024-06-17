@@ -83,7 +83,7 @@ lm_diagnostic <- function(
 
     # Residuals
     if(residuals) {
-        residualPlots(model, main = paste("Residuals -", name))
+        invisible(residualPlots(model, main = paste("Residuals -", name)))
     }
 
     # Normality
@@ -456,6 +456,8 @@ shrinkage_grid_search <- function(df_, y, alphas, family="gaussian")  {
     # Combine all data frames by row names
     combined_df <- do.call(cbind, coefs_df_list)
     colnames(combined_df) <- names(coefs)
+
+    combined_df <- round(combined_df, 5)
 
     # Add NonZero counts
     combined_df <- rbind(combined_df, SelectedPredictors = apply(combined_df, 2, function(x) sum(x != 0)))
